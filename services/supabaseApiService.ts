@@ -166,8 +166,16 @@ export class SupabaseApiService implements ApiService {
   async getOrderItems(orderId: string): Promise<EnrichedOrderItem[]> {
     const { data, error } = await this.supabase.from('order_items').select('*, skus(name, hsn_code, gst_percentage)').eq('order_id', orderId);
     if (error) throw error;
-    // FIX: Spread the original camelCased item properties to satisfy the EnrichedOrderItem type.
-    const enriched = (data || []).map((item: any) => (Object.assign({}, snakeToCamel(item), { skuName: item.skus?.name || '?', hsnCode: item.skus?.hsn_code || '?', gstPercentage: item.skus?.gst_percentage || 0 })));
+    // FIX: Destructure the nested 'skus' object and spread the rest of the camelCased properties to create a valid EnrichedOrderItem.
+    const enriched = (data || []).map((item: any) => {
+        const { skus, ...rest } = snakeToCamel<any>(item);
+        return {
+            ...rest,
+            skuName: skus?.name || '?',
+            hsnCode: skus?.hsnCode || '?',
+            gstPercentage: skus?.gstPercentage || 0
+        };
+    });
     return enriched;
   }
   async getReturns(status: ReturnStatus, portalState: PortalState | null): Promise<EnrichedOrderReturn[]> {
@@ -176,18 +184,33 @@ export class SupabaseApiService implements ApiService {
      if (distributorIds.length === 0) return [];
      const { data, error } = await this.supabase.from('order_returns').select('*, order_return_items(*, skus(name)), distributors(name)').eq('status', status).in('distributor_id', distributorIds);
      if (error) throw error;
-     // FIX: Spread the original camelCased return properties to satisfy the EnrichedOrderReturn type.
-     const enriched = (data || []).map((ret: any) => (Object.assign({}, snakeToCamel(ret), {
-         distributorName: ret.distributors.name,
-         skuDetails: ret.order_return_items.map((item: any) => ({ skuId: item.sku_id, skuName: item.skus.name, quantity: item.quantity, unitPrice: 0 /* Not easily available */ }))
-     })));
+     // FIX: Destructure nested join properties and correctly map to the enriched type to satisfy the EnrichedOrderReturn type.
+     const enriched = (data || []).map((ret: any) => {
+        const { distributors, orderReturnItems, ...rest } = snakeToCamel<any>(ret);
+        return {
+            ...rest,
+            distributorName: distributors?.name,
+            skuDetails: orderReturnItems?.map((item: any) => ({ 
+                skuId: item.skuId, 
+                skuName: item.skus.name, 
+                quantity: item.quantity, 
+                unitPrice: 0 /* Not easily available */ 
+            })) || []
+        };
+     });
      return enriched;
   }
   async getStock(locationId: 'plant' | string): Promise<EnrichedStockItem[]> {
       const { data, error } = await this.supabase.from('stock_items').select('*, skus(name)').eq('location_id', locationId);
       if (error) throw error;
-      // FIX: Spread the original camelCased item properties to satisfy the EnrichedStockItem type.
-      const enriched = (data || []).map((item: any) => Object.assign({}, snakeToCamel(item), { skuName: item.skus.name }));
+      // FIX: Destructure the nested 'skus' object and spread the rest of the camelCased properties to create a valid EnrichedStockItem.
+      const enriched = (data || []).map((item: any) => {
+        const { skus, ...rest } = snakeToCamel<any>(item);
+        return {
+            ...rest,
+            skuName: skus?.name,
+        };
+      });
       return enriched;
   }
   async getAllWalletTransactions(portalState: PortalState | null): Promise<EnrichedWalletTransaction[]> {
@@ -217,8 +240,10 @@ export class SupabaseApiService implements ApiService {
     return txs.map(tx => ({...tx, accountName: dist?.name || '?', accountType: 'Distributor'}));
   }
   async getInvoiceData(orderId: string): Promise<InvoiceData | null> { const { data: orderData, error: orderError } = await this.supabase.from('orders').select('*, distributors(*)').eq('id', orderId).single(); if (orderError) throw orderError; const items = await this.getOrderItems(orderId); return { order: snakeToCamel(orderData), distributor: snakeToCamel(orderData.distributors), items } as InvoiceData; }
-  async getStockTransfers(): Promise<EnrichedStockTransfer[]> { const { data, error } = await this.supabase.from('stock_transfers').select('*, stores(name)'); if (error) throw error; const enriched = (data || []).map((item: any) => (Object.assign({}, snakeToCamel(item), { destinationStoreName: item.stores.name }))); return enriched; }
-  async getEnrichedStockTransferItems(transferId: string): Promise<EnrichedStockTransferItem[]> { const { data, error } = await this.supabase.from('stock_transfer_items').select('*, skus(name, hsn_code, gst_percentage)').eq('transfer_id', transferId); if (error) throw error; const enriched = (data || []).map((item: any) => (Object.assign({}, snakeToCamel(item), { skuName: item.skus.name, hsnCode: item.skus.hsn_code, gstPercentage: item.skus.gst_percentage }))); return enriched; }
+  // FIX: Destructure the nested 'stores' object to create a valid EnrichedStockTransfer.
+  async getStockTransfers(): Promise<EnrichedStockTransfer[]> { const { data, error } = await this.supabase.from('stock_transfers').select('*, stores(name)'); if (error) throw error; const enriched = (data || []).map((item: any) => { const { stores, ...rest } = snakeToCamel<any>(item); return { ...rest, destinationStoreName: stores?.name }; }); return enriched; }
+  // FIX: Destructure the nested 'skus' object to create a valid EnrichedStockTransferItem.
+  async getEnrichedStockTransferItems(transferId: string): Promise<EnrichedStockTransferItem[]> { const { data, error } = await this.supabase.from('stock_transfer_items').select('*, skus(name, hsn_code, gst_percentage)').eq('transfer_id', transferId); if (error) throw error; const enriched = (data || []).map((item: any) => { const { skus, ...rest } = snakeToCamel<any>(item); return { ...rest, skuName: skus?.name, hsnCode: skus?.hsnCode, gstPercentage: skus?.gstPercentage }; }); return enriched; }
   async getDispatchNoteData(transferId: string): Promise<DispatchNoteData | null> { const { data: transferData, error: transferError } = await this.supabase.from('stock_transfers').select('*, stores(*)').eq('id', transferId).single(); if (transferError) throw transferError; const items = await this.getEnrichedStockTransferItems(transferId); return { transfer: snakeToCamel(transferData), store: snakeToCamel(transferData.stores), items }; }
   
   // --- Transactional Logic (RPC Recommended) ---
