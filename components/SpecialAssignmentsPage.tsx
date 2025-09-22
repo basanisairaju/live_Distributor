@@ -8,6 +8,14 @@ import { useSortableData } from '../hooks/useSortableData';
 import SortableTableHeader from './common/SortableTableHeader';
 import { useAuth } from '../hooks/useAuth';
 
+// FIX: Added a type for the pricing table data to fix sortKey type errors.
+interface PricingTableRow {
+    id: string;
+    name: string;
+    priceTierId?: string;
+    [skuId: string]: string | number | undefined;
+}
+
 const SpecialAssignmentsPage = () => {
     const { portal } = useAuth();
     const [activeTab, setActiveTab] = useState('pricing');
@@ -87,7 +95,7 @@ const SpecialAssignmentsPage = () => {
 
     const pricingTableData = useMemo(() => {
         return filteredDistributors.map(dist => {
-            const row: any = {
+            const row: PricingTableRow = {
                 id: dist.id,
                 name: dist.name,
                 priceTierId: dist.priceTierId
@@ -144,14 +152,15 @@ const SpecialAssignmentsPage = () => {
                         <table className="w-full text-left min-w-[1200px] text-sm">
                             <thead className="bg-slate-100 sticky top-0">
                                 <tr>
-                                    <SortableTableHeader label="Distributor" sortKey="name" requestSort={requestPricingSort as any} sortConfig={pricingSortConfig} className="whitespace-nowrap" />
+                                    <SortableTableHeader label="Distributor" sortKey="name" requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="whitespace-nowrap" />
                                     {skus.map(sku => (
+                                        // FIX: Cast sortKey to 'any' for dynamic SKU IDs because the generic T in useSortableData cannot infer dynamic keys from the index signature of PricingTableRow.
                                         <SortableTableHeader key={sku.id} label={sku.name} sortKey={sku.id as any} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
                                     ))}
                                 </tr>
                             </thead>
                             <tbody>
-                                {sortedPricingData.map((distData: any) => {
+                                {sortedPricingData.map((distData) => {
                                     const isTiered = !!distData.priceTierId;
                                     const tierName = isTiered ? priceTiers.find(t => t.id === distData.priceTierId)?.name : 'Default';
                                     return (
@@ -169,7 +178,7 @@ const SpecialAssignmentsPage = () => {
 
                                                 return (
                                                     <td key={sku.id} className={`p-3 text-center font-semibold whitespace-nowrap ${isSpecial ? 'bg-yellow-100 text-yellow-800' : ''}`} title={isSpecial ? `Tier Price: ${tierName}` : `Default Price`}>
-                                                        ₹{finalPrice.toLocaleString()}
+                                                        ₹{(finalPrice as number)?.toLocaleString()}
                                                     </td>
                                                 )
                                             })}

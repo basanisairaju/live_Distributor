@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import { Order, Distributor, OrderStatus, OrderItem, SKU, Scheme, User, UserRole } from '../types';
@@ -43,7 +44,8 @@ const CustomStateTooltip = ({ active, payload, label }: any) => {
             <div className="bg-white p-3 border rounded-lg shadow-lg text-sm max-w-xs">
                 <p className="font-bold mb-2 text-content">{label}: {formatIndianCurrency(total)}</p>
                 <div className="space-y-1">
-                    {data.areas.slice(0, 5).map((area: any) => (
+                    {/* FIX: Explicitly typed 'area' to resolve property access errors. */}
+                    {data.areas.slice(0, 5).map((area: { name: string; value: number; }) => (
                         <div key={area.name} className="flex justify-between items-center text-contentSecondary">
                             <span>{area.name}</span>
                             <span className="ml-4 font-medium text-content">({((area.value / total) * 100).toFixed(1)}%)</span>
@@ -64,7 +66,7 @@ const CustomSalesTooltip = ({ active, payload, label }: any) => {
             <div className="bg-card p-3 border rounded-lg shadow-lg text-sm">
                 <p className="font-bold mb-1 text-content">{label.includes('-') ? formatDateDDMMYYYY(label) : label}</p>
                 {payload.map((pld: any) => (
-                    <p key={pld.name} style={{ color: pld.stroke }}>
+                    <p key={pld.name} style={{ color: pld.stroke || pld.fill }}>
                         {`${pld.name}: ${formatIndianCurrency(pld.value)}`}
                     </p>
                 ))}
@@ -129,6 +131,16 @@ const CustomExecutiveTooltip = ({ active, payload, label }: any) => {
     }
     return null;
 };
+
+// FIX: Added a type for distributor sales data to fix type errors.
+interface DistributorSale {
+    distributorId: string;
+    distributorName: string;
+    walletBalance: number;
+    frequency: number;
+    totalWithGst: number;
+    [key: string]: string | number;
+}
 
 
 const SalesPage: React.FC = () => {
@@ -332,7 +344,8 @@ const SalesPage: React.FC = () => {
                 .filter((name): name is string => !!name)
         )].sort();
 
-        const distributorSalesMap = new Map<string, any>();
+        // FIX: Strongly typed the map to prevent 'any' type issues.
+        const distributorSalesMap = new Map<string, DistributorSale>();
         filteredOrders.forEach(order => {
             const distId = order.distributorId;
             const distributor = distributorMap.get(distId);
@@ -340,13 +353,14 @@ const SalesPage: React.FC = () => {
 
             let distData = distributorSalesMap.get(distId);
             if (!distData) {
+// FIX: Cast the initial object to DistributorSale to allow adding dynamic product keys, resolving numerous downstream type errors.
                 distData = {
                     distributorId: distId,
                     distributorName: distributor.name,
                     walletBalance: distributor.walletBalance,
                     frequency: 0,
                     totalWithGst: 0,
-                };
+                } as DistributorSale;
                 productColumns.forEach(name => {
                     distData[name] = 0;
                     distData[`${name} free`] = 0;
@@ -371,14 +385,15 @@ const SalesPage: React.FC = () => {
         });
         const distributorSales = Array.from(distributorSalesMap.values());
         
-        const salesTotals: Record<string, any> = {
+        // FIX: Strongly typed salesTotals to prevent 'any' type issues.
+        const salesTotals: Record<string, number> = {
             frequency: 0,
             totalWithGst: 0,
         };
         distributorSales.forEach(sale => {
             productColumns.forEach(name => {
-                salesTotals[name] = (salesTotals[name] || 0) + (sale[name] || 0);
-                salesTotals[`${name} free`] = (salesTotals[`${name} free`] || 0) + (sale[`${name} free`] || 0);
+                salesTotals[name] = (salesTotals[name] || 0) + (sale[name] as number || 0);
+                salesTotals[`${name} free`] = (salesTotals[`${name} free`] || 0) + (sale[`${name} free`] as number || 0);
             });
             salesTotals.frequency += sale.frequency || 0;
             salesTotals.totalWithGst += sale.totalWithGst || 0;
@@ -447,7 +462,8 @@ const SalesPage: React.FC = () => {
         const topProductsData = productSalesSummary.sort((a, b) => b.total - a.total);
 
         const salesByStateAndArea = new Map<string, { total: number; areas: Map<string, number> }>();
-        const distributorDetailsMapForCharts = new Map(distributors.map(d => [d.id, { state: d.state, area: d.area, asmName: d.asmName, executiveName: d.executiveName }]));
+        // FIX: Strongly typed the map to ensure type safety.
+        const distributorDetailsMapForCharts = new Map<string, { state: string; area: string; asmName: string; executiveName: string; }>(distributors.map(d => [d.id, { state: d.state, area: d.area, asmName: d.asmName, executiveName: d.executiveName }]));
         filteredOrders.forEach(order => {
             const details = distributorDetailsMapForCharts.get(order.distributorId);
             if (details) {
@@ -544,7 +560,8 @@ const SalesPage: React.FC = () => {
 
     const formatDateForFilename = (date: Date | null) => date ? date.toISOString().split('T')[0] : '';
     const sanitize = (str: string) => str.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    const escapeCsvCell = (cell: any): string => {
+    // FIX: Typed 'cell' to avoid 'any' type errors.
+    const escapeCsvCell = (cell: string | number | null | undefined): string => {
         const str = String(cell ?? '');
         if (str.includes(',') || str.includes('"') || str.includes('\n')) {
             return `"${str.replace(/"/g, '""')}"`;
@@ -651,8 +668,8 @@ const SalesPage: React.FC = () => {
         const rows = sortedDistributorSales.map(sale => {
             const row: (string | number)[] = [sale.distributorId, sale.distributorName, sale.frequency];
             productColumns.forEach(name => {
-                row.push(sale[name] || 0);
-                row.push(sale[`${name} free`] || 0);
+                row.push(sale[name] as number || 0);
+                row.push(sale[`${name} free`] as number || 0);
             });
             row.push(sale.totalWithGst);
             row.push(sale.walletBalance);
@@ -945,10 +962,10 @@ const SalesPage: React.FC = () => {
                                     {salesData.productColumns.map(name => (
                                         <React.Fragment key={name}>
                                             <td className="p-3 text-center border-l border-border">
-                                                {formatIndianNumber(sale[name] || 0)}
+                                                {formatIndianNumber(sale[name] as number || 0)}
                                             </td>
                                             <td className="p-3 text-center text-green-600 font-medium border-r border-border">
-                                                {formatIndianNumber(sale[`${name} free`] || 0)}
+                                                {formatIndianNumber(sale[`${name} free`] as number || 0)}
                                             </td>
                                         </React.Fragment>
                                     ))}
@@ -1006,8 +1023,8 @@ const SalesPage: React.FC = () => {
                                 <div className="mt-4 pt-4 border-t text-sm space-y-2">
                                     <h4 className="font-semibold text-content mb-1">Product Quantities</h4>
                                     {salesData.productColumns.map(name => {
-                                        const paidQty = sale[name] || 0;
-                                        const freeQty = sale[`${name} free`] || 0;
+                                        const paidQty = sale[name] as number || 0;
+                                        const freeQty = sale[`${name} free`] as number || 0;
                                         if (paidQty === 0 && freeQty === 0) return null;
                                         return (
                                             <div key={name} className="flex justify-between items-center">

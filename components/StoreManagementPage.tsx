@@ -58,7 +58,13 @@ const StoreManagementPage: React.FC = () => {
                 await api.deleteStore(store.id);
                 fetchStores();
             } catch (err) {
-                setError(err instanceof Error ? err.message : "An unknown error occurred while deleting.");
+                let message = "An unknown error occurred while deleting.";
+                if (err instanceof Error) {
+                    message = err.message;
+                } else if (err && typeof err === 'object' && 'message' in err) {
+                    message = String((err as { message: unknown }).message);
+                }
+                setError(message);
             }
         }
     };

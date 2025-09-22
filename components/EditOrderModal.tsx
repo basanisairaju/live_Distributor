@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Order, SKU, Scheme, PriceTier, PriceTierItem, Distributor } from '../types';
 import { api } from '../services/api';
@@ -360,7 +361,13 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, onClose, onSave 
             await api.updateOrderItems(order.id, itemsToSubmit, currentUser.username);
             onSave();
         } catch (err) {
-            setError(err instanceof Error ? err.message : "An unknown error occurred.");
+            let message = "An unknown error occurred.";
+            if (err instanceof Error) {
+                message = err.message;
+            } else if (err && typeof err === 'object' && 'message' in err) {
+                message = String((err as { message: unknown }).message);
+            }
+            setError(message);
         } finally {
             setLoading(false);
         }

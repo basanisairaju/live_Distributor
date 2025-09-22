@@ -99,13 +99,18 @@ const ReturnOrderModal: React.FC<ReturnOrderModalProps> = ({ order, onClose, onS
             onSave();
             onClose();
         } catch (err) {
-            setError(err instanceof Error ? err.message : "An unknown error occurred while creating the return request.");
+            let message = "An unknown error occurred while creating the return request.";
+            if (err instanceof Error) {
+                message = err.message;
+            } else if (err && typeof err === 'object' && 'message' in err) {
+                message = String((err as { message: unknown }).message);
+            }
+            setError(message);
         } finally {
             setLoading(false);
         }
     };
     
-    // FIX: Explicitly type the accumulator `sum` as a number to resolve the TypeScript error.
     const totalItemsToReturn = Object.values(returnQuantities).reduce((sum: number, qty) => sum + Number(qty || 0), 0);
 
     return (

@@ -38,7 +38,13 @@ const StoreModal: React.FC<StoreModalProps> = ({ store, onClose, onSave }) => {
             }
             onSave();
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save store.");
+            let message = "Failed to save store.";
+            if (err instanceof Error) {
+                message = err.message;
+            } else if (err && typeof err === 'object' && 'message' in err) {
+                message = String((err as { message: unknown }).message);
+            }
+            setError(message);
         } finally {
             setLoading(false);
         }

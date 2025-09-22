@@ -123,8 +123,13 @@ const DistributorOnboarding: React.FC = () => {
                 navigate(`/distributors/${newDistributor.id}`);
             }, 2000);
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-            setStatusMessage({ type: 'error', text: `Failed to onboard distributor: ${errorMessage}` });
+            let message = "An unknown error occurred.";
+            if (error instanceof Error) {
+                message = error.message;
+            } else if (error && typeof error === 'object' && 'message' in error) {
+                message = String((error as { message: unknown }).message);
+            }
+            setStatusMessage({ type: 'error', text: `Failed to onboard distributor: ${message}` });
         } finally {
             setIsLoading(false);
         }

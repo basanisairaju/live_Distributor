@@ -35,7 +35,21 @@ const LoginPage: React.FC = () => {
       // Navigate to root to let ProtectedRoute handle redirection (e.g., to portal selection)
       navigate('/');
     } catch (error) {
-      setLoginError(error instanceof Error ? error.message : "An unknown error occurred.");
+      console.error("Login attempt failed:", error); // Log the raw error for debugging
+      let message = "An unknown error occurred. Check the console for more details.";
+      if (error instanceof Error) {
+          message = error.message;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+          // Handle Supabase error objects which might not be Error instances
+          message = String((error as { message: unknown }).message);
+      } else if (error) {
+          try {
+            message = JSON.stringify(error);
+          } catch {
+            // Can't stringify, stick with the default message.
+          }
+      }
+      setLoginError(message);
     } finally {
       setIsLoading(false);
     }

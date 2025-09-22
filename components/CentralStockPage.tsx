@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '../services/api';
 import { EnrichedStockItem, SKU, UserRole, StockLedgerEntry, StockMovementType } from '../types';
@@ -94,7 +95,13 @@ const CentralStockPage: React.FC = () => {
     }, [ledger, ledgerSkuFilter, ledgerTypeFilter, ledgerDateRange]);
 
     const { items: sortedLedger, requestSort: requestLedgerSort, sortConfig: ledgerSortConfig } = useSortableData(filteredLedger, { key: 'date', direction: 'descending' });
-    const { items: sortedStock, requestSort: requestStockSort, sortConfig: stockSortConfig } = useSortableData(stock, { key: 'skuName', direction: 'ascending' });
+    
+    // FIX: Added a calculated 'available' property to stock items for correct sorting.
+    const stockWithAvailable = useMemo(() => stock.map(item => ({
+        ...item,
+        available: item.quantity - item.reserved,
+    })), [stock]);
+    const { items: sortedStock, requestSort: requestStockSort, sortConfig: stockSortConfig } = useSortableData(stockWithAvailable, { key: 'skuName', direction: 'ascending' });
 
     const handleResetFilters = () => {
         setLedgerSkuFilter('all');
@@ -268,7 +275,8 @@ const CentralStockPage: React.FC = () => {
                                         <SortableTableHeader label="Product Name" sortKey="skuName" requestSort={requestStockSort} sortConfig={stockSortConfig} />
                                         <SortableTableHeader label="Quantity on Hand" sortKey="quantity" requestSort={requestStockSort} sortConfig={stockSortConfig} className="text-right" />
                                         <SortableTableHeader label="Reserved" sortKey="reserved" requestSort={requestStockSort} sortConfig={stockSortConfig} className="text-right" />
-                                        <SortableTableHeader label="Available" sortKey={"quantity" as any} requestSort={requestStockSort as any} sortConfig={stockSortConfig} className="text-right" />
+                                        {/* FIX: Changed sortKey to 'available' and removed 'as any' casts to fix TypeScript error. */}
+                                        <SortableTableHeader label="Available" sortKey="available" requestSort={requestStockSort} sortConfig={stockSortConfig} className="text-right" />
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -277,7 +285,7 @@ const CentralStockPage: React.FC = () => {
                                             <td className="p-3 font-medium">{item.skuName}</td>
                                             <td className="p-3 text-right text-content">{formatIndianNumber(item.quantity)}</td>
                                             <td className="p-3 text-right text-yellow-700">{formatIndianNumber(item.reserved)}</td>
-                                            <td className="p-3 font-semibold text-right text-green-700">{formatIndianNumber(item.quantity - item.reserved)}</td>
+                                            <td className="p-3 font-semibold text-right text-green-700">{formatIndianNumber(item.available)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -299,7 +307,7 @@ const CentralStockPage: React.FC = () => {
                                         </div>
                                         <div>
                                             <p className="text-xs font-semibold text-contentSecondary">Available</p>
-                                            <p className="font-bold text-lg text-green-700">{formatIndianNumber(item.quantity - item.reserved)}</p>
+                                            <p className="font-bold text-lg text-green-700">{formatIndianNumber(item.available)}</p>
                                         </div>
                                     </div>
                                 </Card>

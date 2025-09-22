@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import Card from './common/Card';
@@ -162,11 +163,13 @@ const RechargeWallet: React.FC = () => {
 
         reset({ accountId: '', amount: undefined, paymentMethod: 'Cash', remarks: '', date: new Date().toISOString().split('T')[0] });
       } catch (error) {
-        // FIX: The 'error' object in a catch block is of type 'unknown' in TypeScript.
-        // It must be type-checked before its properties (like .message) are accessed.
-        // This ensures type safety and prevents potential runtime errors.
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-        setStatusMessage({ type: 'error', text: `Failed to recharge wallet: ${errorMessage}` });
+        let message = "An unknown error occurred.";
+        if (error instanceof Error) {
+            message = error.message;
+        } else if (error && typeof error === 'object' && 'message' in error) {
+            message = String((error as { message: unknown }).message);
+        }
+        setStatusMessage({ type: 'error', text: `Failed to recharge wallet: ${message}` });
       } finally {
         setIsLoading(false);
       }

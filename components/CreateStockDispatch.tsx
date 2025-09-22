@@ -115,7 +115,13 @@ const CreateStockDispatch: React.FC = () => {
             });
             setStatusMessage({ type: 'success', text: `Dispatch ${lastSuccessfulTransfer.id} marked as delivered.` });
         } catch (error) {
-            setStatusMessage({ type: 'error', text: 'Failed to update status.' });
+            let message = 'Failed to update status.';
+            if (error instanceof Error) {
+                message = error.message;
+            } else if (error && typeof error === 'object' && 'message' in error) {
+                message = String((error as { message: unknown }).message);
+            }
+            setStatusMessage({ type: 'error', text: message });
         } finally {
             setIsConfirmingDelivery(false);
         }
@@ -163,8 +169,13 @@ const CreateStockDispatch: React.FC = () => {
             setPlantStock(new Map(stockData.map(item => [item.skuId, item.quantity])));
 
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-            setStatusMessage({ type: 'error', text: `Failed to create dispatch: ${errorMessage}` });
+            let message = "An unknown error occurred.";
+            if (error instanceof Error) {
+                message = error.message;
+            } else if (error && typeof error === 'object' && 'message' in error) {
+                message = String((error as { message: unknown }).message);
+            }
+            setStatusMessage({ type: 'error', text: `Failed to create dispatch: ${message}` });
         } finally {
             setIsLoading(false);
         }

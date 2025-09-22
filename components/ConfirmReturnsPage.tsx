@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { EnrichedOrderReturn, ReturnStatus } from '../types';
@@ -51,7 +52,13 @@ const ConfirmReturnsPage: React.FC = () => {
             await api.confirmOrderReturn(returnId, currentUser.username);
             await fetchReturns();
         } catch (err) {
-            setError(err instanceof Error ? err.message : "An unknown error occurred.");
+            let message = "An unknown error occurred.";
+            if (err instanceof Error) {
+                message = err.message;
+            } else if (err && typeof err === 'object' && 'message' in err) {
+                message = String((err as { message: unknown }).message);
+            }
+            setError(message);
         } finally {
             setConfirmingId(null);
         }

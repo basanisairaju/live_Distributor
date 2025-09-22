@@ -45,7 +45,13 @@ const UserModal: React.FC<{ user: User | null, onClose: () => void, onSave: () =
             }
             onSave();
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save user.");
+            let message = "Failed to save user.";
+            if (err instanceof Error) {
+                message = err.message;
+            } else if (err && typeof err === 'object' && 'message' in err) {
+                message = String((err as { message: unknown }).message);
+            }
+            setError(message);
         } finally {
             setLoading(false);
         }
@@ -213,7 +219,13 @@ const UserManagementPage: React.FC = () => {
                 await api.deleteUser(user.id, currentUser.id, currentUser.role);
                 fetchUsersAndStores();
             } catch (err) {
-                setError(err instanceof Error ? err.message : "An unknown error occurred while deleting.");
+                let message = "An unknown error occurred while deleting.";
+                if (err instanceof Error) {
+                    message = err.message;
+                } else if (err && typeof err === 'object' && 'message' in err) {
+                    message = String((err as { message: unknown }).message);
+                }
+                setError(message);
             }
         }
     };

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { api } from '../services/api';
@@ -19,6 +20,14 @@ interface EditTierModalProps {
     skus: SKU[];
     onClose: () => void;
     onSave: () => void;
+}
+
+// FIX: Added interface for pricing table row data to fix TypeScript errors.
+interface PricingTableRow {
+    id: string;
+    name: string;
+    priceTierId?: string;
+    [skuId: string]: string | number | undefined;
 }
 
 const EditTierModal: React.FC<EditTierModalProps> = ({ tier, skus, onClose, onSave }) => {
@@ -200,7 +209,7 @@ const ManagePriceTiers: React.FC = () => {
 
     const pricingTableData = useMemo(() => {
         return filteredDistributors.map(dist => {
-            const row: any = {
+            const row: PricingTableRow = {
                 id: dist.id,
                 name: dist.name,
                 priceTierId: dist.priceTierId
@@ -309,14 +318,14 @@ const ManagePriceTiers: React.FC = () => {
                             <table className="w-full text-left min-w-[1200px] text-sm">
                                 <thead className="bg-slate-100 sticky top-0">
                                     <tr>
-                                        <SortableTableHeader label="Distributor" sortKey="name" requestSort={requestPricingSort as any} sortConfig={pricingSortConfig} className="whitespace-nowrap" />
+                                        <SortableTableHeader label="Distributor" sortKey="name" requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="whitespace-nowrap" />
                                         {skus.map(sku => (
                                             <SortableTableHeader key={sku.id} label={sku.name} sortKey={sku.id as any} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
                                         ))}
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {sortedPricingData.map((distData: any) => {
+                                    {sortedPricingData.map((distData) => {
                                         const isTiered = !!distData.priceTierId;
                                         const tierName = isTiered ? tiers.find(t => t.id === distData.priceTierId)?.name : 'Default';
                                         return (
@@ -334,7 +343,7 @@ const ManagePriceTiers: React.FC = () => {
 
                                                     return (
                                                         <td key={sku.id} className={`p-3 text-center font-semibold whitespace-nowrap ${isSpecial ? 'bg-yellow-100 text-yellow-800' : ''}`} title={isSpecial ? `Tier Price: ${tierName}` : `Default Price`}>
-                                                            ₹{finalPrice.toLocaleString()}
+                                                            ₹{(finalPrice as number)?.toLocaleString()}
                                                         </td>
                                                     )
                                                 })}

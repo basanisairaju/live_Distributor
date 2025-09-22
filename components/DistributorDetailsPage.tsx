@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -86,7 +87,13 @@ const EditDistributorModal: React.FC<{
             await api.updateDistributor({ ...distributor, ...data }, userRole);
             onSave();
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Failed to update distributor.');
+            let message = 'Failed to update distributor.';
+            if (err instanceof Error) {
+                message = err.message;
+            } else if (err && typeof err === 'object' && 'message' in err) {
+                message = String((err as { message: unknown }).message);
+            }
+            alert(message);
         } finally {
             setLoading(false);
         }
@@ -290,7 +297,13 @@ const DistributorDetailsPage: React.FC = () => {
                 setTimeout(() => setStatusMessage(null), 4000);
                 await fetchData();
             } catch (error) {
-                setStatusMessage({ type: 'error', text: "Could not update order status." });
+                let message = "Could not update order status.";
+                if (error instanceof Error) {
+                    message = error.message;
+                } else if (error && typeof error === 'object' && 'message' in error) {
+                    message = String((error as { message: unknown }).message);
+                }
+                setStatusMessage({ type: 'error', text: message });
             } finally {
                 setUpdatingOrderId(null);
             }
