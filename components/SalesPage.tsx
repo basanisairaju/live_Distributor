@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import { Order, Distributor, OrderStatus, OrderItem, SKU, Scheme, User, UserRole } from '../types';
@@ -377,9 +378,11 @@ const SalesPage: React.FC = () => {
                 if (!skuName) return;
 
                 if (item.isFreebie) {
-                    distData[`${skuName} free`] += item.quantity;
+                    // FIX: Cast dynamic properties to number to ensure correct arithmetic operations and satisfy TypeScript.
+                    distData[`${skuName} free`] = (distData[`${skuName} free`] as number || 0) + item.quantity;
                 } else {
-                    distData[skuName] += item.quantity;
+                    // FIX: Cast dynamic properties to number to ensure correct arithmetic operations and satisfy TypeScript.
+                    distData[skuName] = (distData[skuName] as number || 0) + item.quantity;
                 }
             });
         });

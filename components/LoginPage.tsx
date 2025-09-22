@@ -5,8 +5,7 @@ import { useForm, SubmitHandler } from 'react-hook-form';
 import Card from './common/Card';
 import Button from './common/Button';
 import Input from './common/Input';
-import { Briefcase, Eye, EyeOff, Info } from 'lucide-react';
-import { isLive } from '../services/api';
+import { Briefcase, Eye, EyeOff } from 'lucide-react';
 
 interface FormInputs {
   email: string;
@@ -65,25 +64,6 @@ const LoginPage: React.FC = () => {
         <Card>
             <h2 className="text-lg font-semibold text-center text-content mb-1">Welcome back</h2>
             <p className="text-sm text-contentSecondary text-center mb-6">Please sign in to continue</p>
-            
-            {isLive ? (
-              <div className="mb-4 p-3 bg-green-50 text-green-800 rounded-lg text-sm flex items-start">
-                <Info size={16} className="mr-2 mt-0.5 flex-shrink-0" />
-                <div>
-                  Connected to <strong>Live Backend</strong>. Use your Supabase credentials.
-                </div>
-              </div>
-            ) : (
-              <div className="mb-4 p-3 bg-blue-50 text-blue-800 rounded-lg text-sm flex items-start">
-                <Info size={16} className="mr-2 mt-0.5 flex-shrink-0" />
-                <div>
-                  Running in <strong>Mock Mode</strong>. Use sample credentials:
-                  <ul className="list-disc list-inside mt-1">
-                    <li><code className="text-xs">plant.admin@distributor.com</code> / <code className="text-xs">password</code></li>
-                  </ul>
-                </div>
-              </div>
-            )}
             
             <form onSubmit={handleSubmit(handleLogin)} className="space-y-4">
             <Input

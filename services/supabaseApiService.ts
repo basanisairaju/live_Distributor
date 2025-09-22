@@ -15,6 +15,7 @@ type DbProfile = {
   role: string;
   store_id?: string;
   permissions?: string[];
+  password?: string;
 };
 
 // --- Helper Functions for Case Conversion ---
@@ -52,27 +53,40 @@ export class SupabaseApiService implements ApiService {
 
   // --- Auth ---
   async login(email: string, pass: string): Promise<User> {
-    const { data: { user } , error: authError } = await (this.supabase.auth as any).signInWithPassword({ email, password: pass });
-    if (authError) throw authError;
-    if (!user) throw new Error("Login failed, no user returned.");
+    // Note: Storing and comparing plaintext passwords is a major security risk.
+    // This should be replaced with a secure hashing mechanism (e.g., via an RPC call to a Supabase Edge Function).
+    const { data: profileData, error } = await this.supabase
+      .from('profiles')
+      .select('*')
+      .eq('username', email)
+      .single();
 
-    const { data: profileData, error: profileError } = await this.supabase.from('profiles').select('*').eq('id', user.id).single();
-    if (profileError) throw profileError;
-    if (!profileData) throw new Error("User profile not found.");
+    if (error) {
+        if (error.code === 'PGRST116') { // PostgREST code for "exact one row not found"
+            throw new Error('Invalid username or password');
+        }
+        throw error;
+    }
+
+    if (!profileData) {
+      throw new Error('Invalid username or password');
+    }
     
     const dbProfile = profileData as DbProfile;
-    return {
-      id: dbProfile.id,
-      username: dbProfile.username,
-      role: dbProfile.role as UserRole,
-      storeId: dbProfile.store_id,
-      permissions: dbProfile.permissions,
-    };
+    // Direct password comparison as requested by the user
+    if (dbProfile.password !== pass) {
+        throw new Error('Invalid username or password');
+    }
+
+    const { password, ...userProfile } = snakeToCamel<any>(dbProfile);
+
+    return userProfile as User;
   }
 
   async logout(): Promise<void> {
-    const { error } = await (this.supabase.auth as any).signOut();
-    if (error) throw error;
+    // No server-side session to clear with this custom auth method.
+    // Client-side session is cleared in useAuth.
+    return Promise.resolve();
   }
 
   // --- Generic Helpers ---
@@ -102,11 +116,55 @@ export class SupabaseApiService implements ApiService {
       if (error) throw error;
   }
   
-   // --- Users, Stores, SKUs, Price Tiers --- (Standard CRUD)
-  async getUsers(portalState: PortalState | null): Promise<User[]> { /* ... see mock implementation */ return []; } // Complex logic, best as RPC
-  async addUser(userData: Omit<User, 'id'>, role: UserRole): Promise<User> { throw new Error("User creation must be handled by a secure Edge Function."); }
-  async updateUser(userData: User, role: UserRole): Promise<User> { throw new Error("User updates must be handled by a secure Edge Function."); }
-  async deleteUser(userId: string): Promise<void> { throw new Error("User deletion must be handled by a secure Edge Function."); }
+   // --- Users, Stores, SKUs, Price Tiers ---
+  async getUsers(portalState: PortalState | null): Promise<User[]> {
+    let query = this.supabase.from('profiles').select('id, username, role, store_id, permissions');
+
+    if (portalState?.type === 'store') {
+        query = query.eq('store_id', portalState.id);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return snakeToCamel<User[]>(data || []);
+  }
+
+  async addUser(userData: Omit<User, 'id'>, role: UserRole): Promise<User> {
+    const { data, error } = await this.supabase
+        .from('profiles')
+        .insert(camelToSnake(userData))
+        .select()
+        .single();
+    if (error) throw error;
+    
+    const { password, ...newUser } = snakeToCamel<any>(data);
+    return newUser as User;
+  }
+
+  async updateUser(userData: User, role: UserRole): Promise<User> {
+    const { id, ...updateData } = userData;
+    
+    if (updateData.password === '' || updateData.password === undefined || updateData.password === null) {
+        delete updateData.password;
+    }
+
+    const { data, error } = await this.supabase
+        .from('profiles')
+        .update(camelToSnake(updateData))
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) throw error;
+    const { password, ...updatedUser } = snakeToCamel<any>(data);
+    return updatedUser as User;
+  }
+
+  async deleteUser(userId: string, currentUserId: string, role: UserRole): Promise<void> {
+    if (userId === currentUserId) throw new Error("You cannot delete your own account.");
+    return this._delete('profiles', userId);
+  }
+  
   async getStores(): Promise<Store[]> { return this._getAll<Store>('stores'); }
   async getStoreById(id: string): Promise<Store | null> { return this._getById<Store>('stores', id); }
   async addStore(storeData: Omit<Store, 'id' | 'walletBalance'>): Promise<Store> { return this._add<Store>('stores', { ...storeData, walletBalance: 0 }); }
