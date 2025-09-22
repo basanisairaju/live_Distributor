@@ -234,7 +234,9 @@ export class MockApiService implements ApiService {
       id: getNextId('dist'),
       walletBalance: 0,
       dateAdded: new Date().toISOString(),
+      // Handle empty strings from form for optional fields
       storeId: portalState?.type === 'store' ? portalState.id! : (distributorData.storeId || undefined),
+      priceTierId: distributorData.priceTierId || undefined,
     };
     this.distributors.push(newDistributor);
     this.notifications.unshift({ id: getNextId('notif'), date: new Date().toISOString(), message: `New distributor "${newDistributor.name}" onboarded.`, type: NotificationType.DISTRIBUTOR_ADDED, isRead: false });
@@ -250,7 +252,7 @@ export class MockApiService implements ApiService {
       this.schemes.push(newScheme);
     }
 
-    return Promise.resolve(newDistributor);
+    return Promise.resolve(deepClone(newDistributor));
   }
   async updateDistributor(distributorData: Distributor, role: UserRole): Promise<Distributor> {
       if (role !== UserRole.PLANT_ADMIN) {
