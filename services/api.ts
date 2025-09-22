@@ -10,7 +10,9 @@ let api: ApiService;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 
-if (supabaseUrl && supabaseKey && supabaseUrl !== 'undefined' && supabaseKey !== 'undefined') {
+export const isLive = supabaseUrl && supabaseKey && supabaseUrl !== 'undefined' && supabaseKey !== 'undefined';
+
+if (isLive) {
   console.log("Supabase credentials found. Initializing Supabase API service.");
   api = new SupabaseApiService();
 } else {
