@@ -28,20 +28,26 @@ const UserModal: React.FC<{ user: User | null, onClose: () => void, onSave: () =
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const onFormSubmit: SubmitHandler<User> = async (data) => {
+    const onFormSubmit: SubmitHandler<User> = async (formData) => {
         if (!currentUser) return;
         setLoading(true);
         setError(null);
         try {
+            // Prepare payload, converting empty string storeId to null for DB
+            const payload: any = { ...formData };
+            if (payload.storeId === '') {
+                payload.storeId = null;
+            }
+
             if (user) { // Editing
-                await api.updateUser({ ...user, ...data }, currentUser.role);
+                await api.updateUser({ ...user, ...payload }, currentUser.role);
             } else { // Creating
-                if (!data.password) {
+                if (!payload.password) {
                     setError("Password is required for new users.");
                     setLoading(false);
                     return;
                 }
-                await api.addUser(data, currentUser.role);
+                await api.addUser(payload, currentUser.role);
             }
             onSave();
         } catch (err) {

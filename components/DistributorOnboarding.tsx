@@ -198,12 +198,12 @@ const DistributorOnboarding: React.FC = () => {
                 <div className="border-t border-border pt-6">
                     <h3 className="text-lg font-medium text-content mb-4">Management Details</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Select label="Assign ASM" {...register('asmName', { required: 'ASM is required' })} error={errors.asmName?.message}>
-                            <option value="">Select ASM</option>
+                        <Select label="Assign ASM" {...register('asmName')} error={errors.asmName?.message}>
+                            <option value="">None</option>
                             {asmUsers.map(u => <option key={u.id} value={u.username}>{u.username}</option>)}
                         </Select>
-                        <Select label="Assign Executive" {...register('executiveName', { required: 'Executive is required' })} error={errors.executiveName?.message}>
-                            <option value="">Select Executive</option>
+                        <Select label="Assign Executive" {...register('executiveName')} error={errors.executiveName?.message}>
+                            <option value="">None</option>
                             {executiveUsers.map(u => <option key={u.id} value={u.username}>{u.username}</option>)}
                         </Select>
                     </div>
