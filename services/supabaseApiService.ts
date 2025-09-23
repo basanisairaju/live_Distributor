@@ -224,7 +224,6 @@ export class SupabaseApiService implements ApiService {
   async getOrderItems(orderId: string): Promise<EnrichedOrderItem[]> {
     const { data, error } = await this.supabase.from('order_items').select('*, skus(name, hsn_code, gst_percentage)').eq('order_id', orderId);
     if (error) throw error;
-    // FIX: Destructure the nested 'skus' object and spread the rest of the camelCased properties to create a valid EnrichedOrderItem.
     const enriched = (data || []).map((item: any) => {
         const { skus, ...rest } = snakeToCamel<any>(item);
         return {
@@ -242,7 +241,6 @@ export class SupabaseApiService implements ApiService {
      if (distributorIds.length === 0) return [];
      const { data, error } = await this.supabase.from('order_returns').select('*, order_return_items(*, skus(name)), distributors(name)').eq('status', status).in('distributor_id', distributorIds);
      if (error) throw error;
-     // FIX: Destructure nested join properties and correctly map to the enriched type to satisfy the EnrichedOrderReturn type.
      const enriched = (data || []).map((ret: any) => {
         const { distributors, orderReturnItems, ...rest } = snakeToCamel<any>(ret);
         return {
@@ -261,7 +259,6 @@ export class SupabaseApiService implements ApiService {
   async getStock(locationId: 'plant' | string): Promise<EnrichedStockItem[]> {
       const { data, error } = await this.supabase.from('stock_items').select('*, skus(name)').eq('location_id', locationId);
       if (error) throw error;
-      // FIX: Destructure the nested 'skus' object and spread the rest of the camelCased properties to create a valid EnrichedStockItem.
       const enriched = (data || []).map((item: any) => {
         const { skus, ...rest } = snakeToCamel<any>(item);
         return {
@@ -272,7 +269,6 @@ export class SupabaseApiService implements ApiService {
       return enriched;
   }
   async getAllWalletTransactions(portalState: PortalState | null): Promise<EnrichedWalletTransaction[]> {
-      // NOTE: This is not performant for large datasets. A database VIEW is recommended.
       const dists = await this.getDistributors(portalState);
       const stores = await this.getStores();
       const distMap = new Map(dists.map(d => [d.id, d.name]));
@@ -298,111 +294,89 @@ export class SupabaseApiService implements ApiService {
     return txs.map(tx => ({...tx, accountName: dist?.name || '?', accountType: 'Distributor'}));
   }
   async getInvoiceData(orderId: string): Promise<InvoiceData | null> { const { data: orderData, error: orderError } = await this.supabase.from('orders').select('*, distributors(*)').eq('id', orderId).single(); if (orderError) throw orderError; const items = await this.getOrderItems(orderId); return { order: snakeToCamel(orderData), distributor: snakeToCamel(orderData.distributors), items } as InvoiceData; }
-  // FIX: Destructure the nested 'stores' object to create a valid EnrichedStockTransfer.
   async getStockTransfers(): Promise<EnrichedStockTransfer[]> { const { data, error } = await this.supabase.from('stock_transfers').select('*, stores(name)'); if (error) throw error; const enriched = (data || []).map((item: any) => { const { stores, ...rest } = snakeToCamel<any>(item); return { ...rest, destinationStoreName: stores?.name }; }); return enriched; }
-  // FIX: Destructure the nested 'skus' object to create a valid EnrichedStockTransferItem.
   async getEnrichedStockTransferItems(transferId: string): Promise<EnrichedStockTransferItem[]> { const { data, error } = await this.supabase.from('stock_transfer_items').select('*, skus(name, hsn_code, gst_percentage)').eq('transfer_id', transferId); if (error) throw error; const enriched = (data || []).map((item: any) => { const { skus, ...rest } = snakeToCamel<any>(item); return { ...rest, skuName: skus?.name, hsnCode: skus?.hsnCode, gstPercentage: skus?.gstPercentage }; }); return enriched; }
   async getDispatchNoteData(transferId: string): Promise<DispatchNoteData | null> { const { data: transferData, error: transferError } = await this.supabase.from('stock_transfers').select('*, stores(*)').eq('id', transferId).single(); if (transferError) throw transferError; const items = await this.getEnrichedStockTransferItems(transferId); return { transfer: snakeToCamel(transferData), store: snakeToCamel(transferData.stores), items }; }
   
-  // --- Transactional Logic (RPC Recommended) ---
-  // NOTE: The following methods perform actions that MUST be atomic.
-  // Using a series of client-side calls is NOT recommended for production as it can lead to data inconsistency.
-  // These should be converted to Supabase Edge Functions (RPCs) for data integrity.
+  // --- Transactional Logic (RPC) ---
+  // These methods call Supabase Edge Functions (RPCs) to ensure atomicity.
+  // You MUST deploy the provided SQL functions to your Supabase project for these to work.
+
+  async addPlantProduction(items: { skuId: string; quantity: number }[], username: string): Promise<void> {
+    const { error } = await this.supabase.rpc('add_plant_production', {
+      items_to_add: items,
+      p_username: username
+    });
+    if (error) {
+      console.error('RPC Error (add_plant_production):', error);
+      throw new Error(`Failed to add production: ${error.message}`);
+    }
+  }
 
   async placeOrder(distributorId: string, items: { skuId: string; quantity: number }[], username: string): Promise<Order> {
-    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'place_order' to handle this transaction securely and atomically on the server.");
+    const { data, error } = await this.supabase.rpc('place_order', {
+      p_distributor_id: distributorId,
+      p_items: items,
+      p_username: username
+    });
+    if (error) {
+      console.error('RPC Error (place_order):', error);
+      throw new Error(`Failed to place order: ${error.message}`);
+    }
+    return snakeToCamel<Order>(data);
   }
+
   async updateOrderItems(orderId: string, items: { skuId: string; quantity: number }[], username: string): Promise<void> {
-    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'update_order_items' to handle this transaction securely and atomically on the server.");
+    const { error } = await this.supabase.rpc('update_order_items', { p_order_id: orderId, p_items: items, p_username: username });
+    if (error) throw new Error(`Failed to update order items: ${error.message}`);
   }
+
   async updateOrderStatus(orderId: string, status: OrderStatus, username: string): Promise<void> {
-    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'update_order_status' to handle this transaction securely and atomically on the server.");
+    const { error } = await this.supabase.rpc('update_order_status', { p_order_id: orderId, p_status: status, p_username: username });
+    if (error) throw new Error(`Failed to update order status: ${error.message}`);
   }
+
   async deleteOrder(orderId: string, remarks: string, username: string): Promise<void> {
-    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'delete_order' to handle this transaction securely and atomically on the server.");
+    const { error } = await this.supabase.rpc('delete_order', { p_order_id: orderId, p_remarks: remarks, p_username: username });
+    if (error) throw new Error(`Failed to delete order: ${error.message}`);
   }
-  async initiateOrderReturn(orderId: string, items: { skuId: string; quantity: number }[], username: string, remarks: string): Promise<OrderReturn> {
-    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'initiate_order_return' to handle this transaction securely and atomically on the server.");
+
+  async initiateOrderReturn(orderId: string, itemsToReturn: { skuId: string; quantity: number }[], username: string, remarks: string): Promise<OrderReturn> {
+    const { data, error } = await this.supabase.rpc('initiate_order_return', { p_order_id: orderId, p_items: itemsToReturn, p_username: username, p_remarks: remarks });
+    if (error) throw new Error(`Failed to initiate return: ${error.message}`);
+    return snakeToCamel<OrderReturn>(data);
   }
+
   async confirmOrderReturn(returnId: string, username: string): Promise<void> {
-    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'confirm_order_return' to handle this transaction securely and atomically on the server.");
+    const { error } = await this.supabase.rpc('confirm_order_return', { p_return_id: returnId, p_username: username });
+    if (error) throw new Error(`Failed to confirm return: ${error.message}`);
   }
+
   async rechargeWallet(distributorId: string, amount: number, username: string, paymentMethod: string, remarks: string, date: string): Promise<void> {
-    throw new Error("This operation is not implemented client-side to prevent race conditions. Please create a Supabase RPC function named 'recharge_wallet' to handle this transaction securely and atomically on the server.");
+    const { error } = await this.supabase.rpc('recharge_wallet', { p_distributor_id: distributorId, p_amount: amount, p_username: username, p_payment_method: paymentMethod, p_remarks: remarks, p_date: date });
+    if (error) throw new Error(`Failed to recharge wallet: ${error.message}`);
   }
+
   async rechargeStoreWallet(storeId: string, amount: number, username: string, paymentMethod: string, remarks: string, date: string): Promise<void> {
-    throw new Error("This operation is not implemented client-side to prevent race conditions. Please create a Supabase RPC function named 'recharge_store_wallet' to handle this transaction securely and atomically on the server.");
+    const { error } = await this.supabase.rpc('recharge_store_wallet', { p_store_id: storeId, p_amount: amount, p_username: username, p_payment_method: paymentMethod, p_remarks: remarks, p_date: date });
+    if (error) throw new Error(`Failed to recharge store wallet: ${error.message}`);
   }
-  async addPlantProduction(items: { skuId: string; quantity: number }[], username: string): Promise<void> {
-    // This multi-step operation is not transactional and can lead to inconsistent data if one step fails.
-    // It is STRONGLY recommended to implement this as a single RPC function in your Supabase backend.
-    const skuIds = items.map(item => item.skuId);
-    if (skuIds.length === 0) return;
 
-    // 1. Fetch existing stock for the affected SKUs at the plant
-    const { data: existingStockData, error: fetchError } = await this.supabase
-      .from('stock_items')
-      .select('sku_id, quantity, reserved')
-      .eq('location_id', 'plant')
-      .in('sku_id', skuIds);
-
-    if (fetchError) {
-      console.error("Error fetching existing stock:", fetchError);
-      throw new Error("Could not fetch current stock levels before updating.");
-    }
-
-    const stockMap = new Map((existingStockData || []).map(s => [s.sku_id, { quantity: s.quantity, reserved: s.reserved }]));
-
-    // 2. Prepare payloads for upserting stock and inserting ledger entries
-    const stockUpsertPayload = items.map(item => {
-      const existing = stockMap.get(item.skuId) || { quantity: 0, reserved: 0 };
-      return {
-        location_id: 'plant',
-        sku_id: item.skuId,
-        quantity: existing.quantity + item.quantity,
-        reserved: existing.reserved,
-      };
-    });
-
-    const ledgerInsertPayload = items.map(item => {
-      const existing = stockMap.get(item.skuId) || { quantity: 0 };
-      return camelToSnake({
-        date: new Date().toISOString(),
-        skuId: item.skuId,
-        quantityChange: item.quantity,
-        balanceAfter: existing.quantity + item.quantity,
-        type: StockMovementType.PRODUCTION,
-        locationId: 'plant',
-        notes: 'Daily Production',
-        initiatedBy: username,
-      });
-    });
-
-    // 3. Execute the database operations
-    const { error: upsertError } = await this.supabase.from('stock_items').upsert(stockUpsertPayload);
-
-    if (upsertError) {
-      console.error("Error upserting stock items:", upsertError);
-      throw new Error("Failed to update stock quantities. Ledger was not updated.");
-    }
-    
-    const { error: insertError } = await this.supabase.from('stock_ledger_entries').insert(ledgerInsertPayload);
-    
-    if (insertError) {
-      // This is where data becomes inconsistent. The stock is updated, but the ledger failed.
-      console.error("CRITICAL: Error inserting into stock ledger after stock was updated:", insertError);
-      throw new Error("Stock was updated, but failed to record the transaction in the ledger. Manual correction may be required.");
-    }
-  }
   async createStockTransfer(storeId: string, items: { skuId: string; quantity: number }[], username: string): Promise<StockTransfer> {
-    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'create_stock_transfer' to handle this transaction securely and atomically on the server.");
+    const { data, error } = await this.supabase.rpc('create_stock_transfer', { p_store_id: storeId, p_items: items, p_username: username });
+    if (error) throw new Error(`Failed to create stock transfer: ${error.message}`);
+    return snakeToCamel<StockTransfer>(data);
   }
+
   async updateStockTransferStatus(transferId: string, status: StockTransferStatus, username: string): Promise<void> {
-    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'update_stock_transfer_status' to handle this transaction securely and atomically on the server.");
+    const { error } = await this.supabase.rpc('update_stock_transfer_status', { p_transfer_id: transferId, p_status: status, p_username: username });
+    if (error) throw new Error(`Failed to update transfer status: ${error.message}`);
   }
+  
   async transferStockToStore(): Promise<void> {
     throw new Error("transferStockToStore is deprecated and should not be used.");
   }
+  
   async reactivateScheme(schemeId: string, newEndDate: string, username: string, role: UserRole): Promise<Scheme> {
       const { data, error } = await this.supabase.from('schemes').update({ end_date: newEndDate, stopped_by: null, stopped_date: null }).eq('id', schemeId).select().single();
       if (error) throw error;

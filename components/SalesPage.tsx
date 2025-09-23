@@ -308,8 +308,9 @@ const SalesPage: React.FC = () => {
         const filteredOrderIds = new Set(filteredOrders.map(o => o.id));
         const filteredOrderItems = itemsFilteredByProduct.filter(item => filteredOrderIds.has(item.orderId));
         
-        const skuMap = new Map(skus.map(s => [s.id, s.name]));
-        const distributorMap = new Map(distributors.map(d => [d.id, d]));
+        // FIX: Explicitly type Maps to ensure correct type inference downstream.
+        const skuMap = new Map<string, string>(skus.map(s => [s.id, s.name]));
+        const distributorMap = new Map<string, Distributor>(distributors.map(d => [d.id, d]));
 
         let totalPaidQty = 0;
         let totalFreeQty = 0;
