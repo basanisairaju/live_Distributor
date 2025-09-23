@@ -334,7 +334,65 @@ export class SupabaseApiService implements ApiService {
     throw new Error("This operation is not implemented client-side to prevent race conditions. Please create a Supabase RPC function named 'recharge_store_wallet' to handle this transaction securely and atomically on the server.");
   }
   async addPlantProduction(items: { skuId: string; quantity: number }[], username: string): Promise<void> {
-    throw new Error("This operation is not implemented client-side to prevent race conditions. Please create a Supabase RPC function named 'add_plant_production' to handle this transaction securely and atomically on the server.");
+    // This multi-step operation is not transactional and can lead to inconsistent data if one step fails.
+    // It is STRONGLY recommended to implement this as a single RPC function in your Supabase backend.
+    const skuIds = items.map(item => item.skuId);
+    if (skuIds.length === 0) return;
+
+    // 1. Fetch existing stock for the affected SKUs at the plant
+    const { data: existingStockData, error: fetchError } = await this.supabase
+      .from('stock_items')
+      .select('sku_id, quantity, reserved')
+      .eq('location_id', 'plant')
+      .in('sku_id', skuIds);
+
+    if (fetchError) {
+      console.error("Error fetching existing stock:", fetchError);
+      throw new Error("Could not fetch current stock levels before updating.");
+    }
+
+    const stockMap = new Map((existingStockData || []).map(s => [s.sku_id, { quantity: s.quantity, reserved: s.reserved }]));
+
+    // 2. Prepare payloads for upserting stock and inserting ledger entries
+    const stockUpsertPayload = items.map(item => {
+      const existing = stockMap.get(item.skuId) || { quantity: 0, reserved: 0 };
+      return {
+        location_id: 'plant',
+        sku_id: item.skuId,
+        quantity: existing.quantity + item.quantity,
+        reserved: existing.reserved,
+      };
+    });
+
+    const ledgerInsertPayload = items.map(item => {
+      const existing = stockMap.get(item.skuId) || { quantity: 0 };
+      return camelToSnake({
+        date: new Date().toISOString(),
+        skuId: item.skuId,
+        quantityChange: item.quantity,
+        balanceAfter: existing.quantity + item.quantity,
+        type: StockMovementType.PRODUCTION,
+        locationId: 'plant',
+        notes: 'Daily Production',
+        initiatedBy: username,
+      });
+    });
+
+    // 3. Execute the database operations
+    const { error: upsertError } = await this.supabase.from('stock_items').upsert(stockUpsertPayload);
+
+    if (upsertError) {
+      console.error("Error upserting stock items:", upsertError);
+      throw new Error("Failed to update stock quantities. Ledger was not updated.");
+    }
+    
+    const { error: insertError } = await this.supabase.from('stock_ledger_entries').insert(ledgerInsertPayload);
+    
+    if (insertError) {
+      // This is where data becomes inconsistent. The stock is updated, but the ledger failed.
+      console.error("CRITICAL: Error inserting into stock ledger after stock was updated:", insertError);
+      throw new Error("Stock was updated, but failed to record the transaction in the ledger. Manual correction may be required.");
+    }
   }
   async createStockTransfer(storeId: string, items: { skuId: string; quantity: number }[], username: string): Promise<StockTransfer> {
     throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'create_stock_transfer' to handle this transaction securely and atomically on the server.");

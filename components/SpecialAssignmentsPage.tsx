@@ -154,8 +154,8 @@ const SpecialAssignmentsPage = () => {
                                 <tr>
                                     <SortableTableHeader label="Distributor" sortKey="name" requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="whitespace-nowrap" />
                                     {skus.map(sku => (
-                                        // FIX: Cast dynamic SKU ID to 'any' for the 'sortKey' prop. TypeScript has difficulty inferring that a dynamic string from an index signature is a valid key in this generic component context, and this cast resolves the compilation error.
-                                        <SortableTableHeader key={sku.id} label={sku.name} sortKey={sku.id as any} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
+                                        // FIX: Cast dynamic SKU ID to 'keyof PricingTableRow' to satisfy the generic constraint of the component.
+                                        <SortableTableHeader key={sku.id} label={sku.name} sortKey={sku.id as keyof PricingTableRow} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
                                     ))}
                                 </tr>
                             </thead>

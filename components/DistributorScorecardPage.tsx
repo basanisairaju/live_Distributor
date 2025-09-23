@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo } from 'react';
 // FIX: Corrected the import from GoogleGenerativeAI to GoogleGenAI and added Type for schema definition
 import { GoogleGenAI, Type } from '@google/genai';
