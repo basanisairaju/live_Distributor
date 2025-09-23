@@ -309,59 +309,42 @@ export class SupabaseApiService implements ApiService {
   // Using a series of client-side calls is NOT recommended for production as it can lead to data inconsistency.
   // These should be converted to Supabase Edge Functions (RPCs) for data integrity.
 
-  async placeOrder(distributorId: string, items: { skuId: string; quantity: number }[], username: string): Promise<Order> { throw new Error("This complex operation should be a single Supabase RPC call for data integrity."); }
-  async updateOrderItems(orderId: string, items: { skuId: string; quantity: number }[], username: string): Promise<void> { throw new Error("This complex operation should be a single Supabase RPC call for data integrity."); }
-  async updateOrderStatus(orderId: string, status: OrderStatus, username: string): Promise<void> { throw new Error("This complex operation should be a single Supabase RPC call for data integrity."); }
-  async deleteOrder(orderId: string, remarks: string, username: string): Promise<void> { throw new Error("This complex operation should be a single Supabase RPC call for data integrity."); }
-  async initiateOrderReturn(orderId: string, items: { skuId: string; quantity: number }[], username: string, remarks: string): Promise<OrderReturn> { throw new Error("This complex operation should be a single Supabase RPC call for data integrity."); }
-  async confirmOrderReturn(returnId: string, username: string): Promise<void> { throw new Error("This complex operation should be a single Supabase RPC call for data integrity."); }
+  async placeOrder(distributorId: string, items: { skuId: string; quantity: number }[], username: string): Promise<Order> {
+    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'place_order' to handle this transaction securely and atomically on the server.");
+  }
+  async updateOrderItems(orderId: string, items: { skuId: string; quantity: number }[], username: string): Promise<void> {
+    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'update_order_items' to handle this transaction securely and atomically on the server.");
+  }
+  async updateOrderStatus(orderId: string, status: OrderStatus, username: string): Promise<void> {
+    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'update_order_status' to handle this transaction securely and atomically on the server.");
+  }
+  async deleteOrder(orderId: string, remarks: string, username: string): Promise<void> {
+    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'delete_order' to handle this transaction securely and atomically on the server.");
+  }
+  async initiateOrderReturn(orderId: string, items: { skuId: string; quantity: number }[], username: string, remarks: string): Promise<OrderReturn> {
+    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'initiate_order_return' to handle this transaction securely and atomically on the server.");
+  }
+  async confirmOrderReturn(returnId: string, username: string): Promise<void> {
+    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'confirm_order_return' to handle this transaction securely and atomically on the server.");
+  }
   async rechargeWallet(distributorId: string, amount: number, username: string, paymentMethod: string, remarks: string, date: string): Promise<void> {
-    const { data: dist, error: distErr } = await this.supabase.from('distributors').select('wallet_balance').eq('id', distributorId).single();
-    if(distErr) throw distErr;
-    const newBalance = dist.wallet_balance + amount;
-
-    const { error: txErr } = await this.supabase.from('wallet_transactions').insert(camelToSnake({
-      distributorId, date, type: TransactionType.RECHARGE, amount, balanceAfter: newBalance,
-      paymentMethod, remarks, initiatedBy: username
-    }));
-    if(txErr) throw txErr;
-
-    const { error: updateErr } = await this.supabase.from('distributors').update({ wallet_balance: newBalance }).eq('id', distributorId);
-    if(updateErr) throw updateErr; // NOTE: Transaction is now inconsistent if this fails.
+    throw new Error("This operation is not implemented client-side to prevent race conditions. Please create a Supabase RPC function named 'recharge_wallet' to handle this transaction securely and atomically on the server.");
   }
   async rechargeStoreWallet(storeId: string, amount: number, username: string, paymentMethod: string, remarks: string, date: string): Promise<void> {
-    const { data: store, error: storeErr } = await this.supabase.from('stores').select('wallet_balance').eq('id', storeId).single();
-    if(storeErr) throw storeErr;
-    const newBalance = store.wallet_balance + amount;
-    
-    const { error: txErr } = await this.supabase.from('wallet_transactions').insert(camelToSnake({
-      storeId, date, type: TransactionType.RECHARGE, amount, balanceAfter: newBalance,
-      paymentMethod, remarks, initiatedBy: username
-    }));
-    if(txErr) throw txErr;
-    
-    const { error: updateErr } = await this.supabase.from('stores').update({ wallet_balance: newBalance }).eq('id', storeId);
-    if(updateErr) throw updateErr; // NOTE: Transaction is now inconsistent if this fails.
+    throw new Error("This operation is not implemented client-side to prevent race conditions. Please create a Supabase RPC function named 'recharge_store_wallet' to handle this transaction securely and atomically on the server.");
   }
   async addPlantProduction(items: { skuId: string; quantity: number }[], username: string): Promise<void> {
-    for (const item of items) {
-      const { data } = await this.supabase.rpc('add_stock', {
-        p_location_id: 'plant',
-        p_sku_id: item.skuId,
-        p_quantity_change: item.quantity
-      });
-      const newBalance = data;
-      
-      const { error: ledgerErr } = await this.supabase.from('stock_ledger_entries').insert(camelToSnake({
-          skuId: item.skuId, date: new Date().toISOString(), quantityChange: item.quantity, balanceAfter: newBalance,
-          type: StockMovementType.PRODUCTION, locationId: 'plant', notes: 'Daily Production', initiatedBy: username
-      }));
-      if (ledgerErr) throw ledgerErr;
-    }
+    throw new Error("This operation is not implemented client-side to prevent race conditions. Please create a Supabase RPC function named 'add_plant_production' to handle this transaction securely and atomically on the server.");
   }
-  async createStockTransfer(storeId: string, items: { skuId: string; quantity: number }[], username: string): Promise<StockTransfer> { throw new Error("This complex operation should be a single Supabase RPC call for data integrity."); }
-  async updateStockTransferStatus(transferId: string, status: StockTransferStatus, username: string): Promise<void> { throw new Error("This complex operation should be a single Supabase RPC call for data integrity."); }
-  async transferStockToStore(): Promise<void> { throw new Error("transferStockToStore is deprecated."); }
+  async createStockTransfer(storeId: string, items: { skuId: string; quantity: number }[], username: string): Promise<StockTransfer> {
+    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'create_stock_transfer' to handle this transaction securely and atomically on the server.");
+  }
+  async updateStockTransferStatus(transferId: string, status: StockTransferStatus, username: string): Promise<void> {
+    throw new Error("This operation is not implemented client-side for data integrity. Please create a Supabase RPC function named 'update_stock_transfer_status' to handle this transaction securely and atomically on the server.");
+  }
+  async transferStockToStore(): Promise<void> {
+    throw new Error("transferStockToStore is deprecated and should not be used.");
+  }
   async reactivateScheme(schemeId: string, newEndDate: string, username: string, role: UserRole): Promise<Scheme> {
       const { data, error } = await this.supabase.from('schemes').update({ end_date: newEndDate, stopped_by: null, stopped_date: null }).eq('id', schemeId).select().single();
       if (error) throw error;
