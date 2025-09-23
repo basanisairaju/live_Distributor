@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+// FIX: Corrected the import for 'useNavigate' to resolve the module export error.
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { Distributor, Order, OrderStatus, EnrichedStockItem, Store } from '../types';

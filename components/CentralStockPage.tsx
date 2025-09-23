@@ -148,7 +148,7 @@ const CentralStockPage: React.FC = () => {
         setIsSubmitting(true);
         setStatusMessage(null);
         try {
-            await api.addPlantProduction(itemsToSubmit, currentUser.username);
+            await api.addPlantProduction(itemsToSubmit);
             setStatusMessage({ type: 'success', text: 'Production successfully recorded!' });
             setProductionItems([]);
             await fetchData();

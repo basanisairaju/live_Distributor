@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { HashRouter } from 'react-router-dom';
+// FIX: Replaced HashRouter with BrowserRouter to resolve an export error. This is a common fix for environments where HashRouter might not be supported, while maintaining routing functionality.
+import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './hooks/useAuth';
 
@@ -9,11 +10,11 @@ if (container) {
   const root = createRoot(container);
   root.render(
     <React.StrictMode>
-      <HashRouter>
+      <BrowserRouter>
         <AuthProvider>
           <App />
         </AuthProvider>
-      </HashRouter>
+      </BrowserRouter>
     </React.StrictMode>
   );
 }

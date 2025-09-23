@@ -390,8 +390,9 @@ export class MockApiService implements ApiService {
       
       return { subtotal, totalAmount: parseFloat(totalAmount.toFixed(2)), finalOrderItems: orderItems, distributor };
   }
-
-  async placeOrder(distributorId: string, items: { skuId: string; quantity: number }[], username: string): Promise<Order> {
+// FIX: Removed 'username' parameter to match ApiService interface.
+  async placeOrder(distributorId: string, items: { skuId: string; quantity: number }[]): Promise<Order> {
+    const username = 'mock.user@distributor.com'; // Hardcoded for mock service
     const { totalAmount, finalOrderItems, distributor } = this.calculateOrder(distributorId, items);
 
     if (totalAmount > distributor.walletBalance + distributor.creditLimit) {
@@ -456,8 +457,9 @@ export class MockApiService implements ApiService {
 
     return Promise.resolve(deepClone(newOrder));
   }
-
-  async updateOrderItems(orderId: string, items: { skuId: string; quantity: number }[], username: string): Promise<void> {
+// FIX: Removed 'username' parameter to match ApiService interface.
+  async updateOrderItems(orderId: string, items: { skuId: string; quantity: number }[]): Promise<void> {
+    const username = 'mock.user@distributor.com'; // Hardcoded for mock service
     const order = this.orders.find(o => o.id === orderId);
     if (!order) throw new Error("Order not found");
     if (order.status !== OrderStatus.PENDING) throw new Error("Cannot edit a delivered order.");
@@ -540,7 +542,9 @@ export class MockApiService implements ApiService {
   }
   
   // FIX: Changed the type of the 'status' parameter from a string literal union to the OrderStatus enum to ensure type safety.
-  async updateOrderStatus(orderId: string, status: OrderStatus, username: string): Promise<void> {
+  // FIX: Removed 'username' parameter to match ApiService interface.
+  async updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
+      const username = 'mock.user@distributor.com'; // Hardcoded for mock service
       const order = this.orders.find(o => o.id === orderId);
       if (!order) throw new Error("Order not found");
       if (order.status === status) return Promise.resolve(); // No change
@@ -581,8 +585,9 @@ export class MockApiService implements ApiService {
       }
       return Promise.resolve();
   }
-
-  async deleteOrder(orderId: string, remarks: string, username: string): Promise<void> {
+// FIX: Removed 'username' parameter to match ApiService interface.
+  async deleteOrder(orderId: string, remarks: string): Promise<void> {
+      const username = 'mock.user@distributor.com'; // Hardcoded for mock service
       const orderIndex = this.orders.findIndex(o => o.id === orderId);
       if (orderIndex === -1) throw new Error("Order not found");
       const order = this.orders[orderIndex];
@@ -636,7 +641,9 @@ export class MockApiService implements ApiService {
   }
   
   // --- Returns ---
-  async initiateOrderReturn(orderId: string, itemsToReturn: { skuId: string; quantity: number }[], username: string, remarks: string): Promise<OrderReturn> {
+  // FIX: Removed 'username' parameter to match ApiService interface.
+  async initiateOrderReturn(orderId: string, itemsToReturn: { skuId: string; quantity: number }[], remarks: string): Promise<OrderReturn> {
+      const username = 'mock.user@distributor.com'; // Hardcoded for mock service
       const order = this.orders.find(o => o.id === orderId);
       if (!order) throw new Error("Order not found");
       
@@ -700,8 +707,9 @@ export class MockApiService implements ApiService {
       });
       return Promise.resolve(deepClone(enriched.sort((a,b) => new Date(b.initiatedDate).getTime() - new Date(a.initiatedDate).getTime())));
   }
-
-  async confirmOrderReturn(returnId: string, username: string): Promise<void> {
+// FIX: Removed 'username' parameter to match ApiService interface.
+  async confirmOrderReturn(returnId: string): Promise<void> {
+      const username = 'mock.user@distributor.com'; // Hardcoded for mock service
       const returnRequest = this.orderReturns.find(r => r.id === returnId);
       if (!returnRequest || returnRequest.status !== ReturnStatus.PENDING) throw new Error("Return request not found or already processed.");
       
@@ -960,8 +968,9 @@ export class MockApiService implements ApiService {
         account.walletBalance = currentBalance;
     }
   }
-
-  async rechargeWallet(distributorId: string, amount: number, username: string, paymentMethod: string, remarks: string, date: string): Promise<void> {
+// FIX: Removed 'username' parameter to match ApiService interface.
+  async rechargeWallet(distributorId: string, amount: number, paymentMethod: string, remarks: string, date: string): Promise<void> {
+    const username = 'mock.user@distributor.com'; // Hardcoded for mock service
     const distributor = this.distributors.find(d => d.id === distributorId);
     if (!distributor) throw new Error("Distributor not found.");
     
@@ -988,7 +997,9 @@ export class MockApiService implements ApiService {
 
     return Promise.resolve();
   }
-   async rechargeStoreWallet(storeId: string, amount: number, username: string, paymentMethod: string, remarks: string, date: string): Promise<void> {
+   // FIX: Removed 'username' parameter to match ApiService interface.
+   async rechargeStoreWallet(storeId: string, amount: number, paymentMethod: string, remarks: string, date: string): Promise<void> {
+    const username = 'mock.user@distributor.com'; // Hardcoded for mock service
     const store = this.stores.find(s => s.id === storeId);
     if (!store) throw new Error("Store not found.");
     
@@ -1052,8 +1063,9 @@ export class MockApiService implements ApiService {
     const ledger = this.stockLedger.filter(s => s.locationId === locationId);
     return Promise.resolve(deepClone(ledger));
   }
-
-  async addPlantProduction(items: { skuId: string; quantity: number }[], username: string): Promise<void> {
+// FIX: Removed 'username' parameter to match ApiService interface.
+  async addPlantProduction(items: { skuId: string; quantity: number }[]): Promise<void> {
+      const username = 'mock.user@distributor.com'; // Hardcoded for mock service
       for (const item of items) {
           let stockItem = this.stockItems.find(s => s.locationId === 'plant' && s.skuId === item.skuId);
           if (stockItem) {
@@ -1120,7 +1132,9 @@ export class MockApiService implements ApiService {
   }
 
    // --- Stock Transfers ---
-  async createStockTransfer(storeId: string, items: { skuId: string; quantity: number }[], username: string): Promise<StockTransfer> {
+  // FIX: Removed 'username' parameter to match ApiService interface.
+  async createStockTransfer(storeId: string, items: { skuId: string; quantity: number }[]): Promise<StockTransfer> {
+    const username = 'mock.user@distributor.com'; // Hardcoded for mock service
     let totalValue = 0;
     const transferItems: Omit<StockTransferItem, 'id' | 'transferId'>[] = [];
     
@@ -1198,8 +1212,9 @@ export class MockApiService implements ApiService {
     });
     return Promise.resolve(deepClone(enriched));
   }
-
-  async updateStockTransferStatus(transferId: string, status: StockTransferStatus, username: string): Promise<void> {
+// FIX: Removed 'username' parameter to match ApiService interface.
+  async updateStockTransferStatus(transferId: string, status: StockTransferStatus): Promise<void> {
+    const username = 'mock.user@distributor.com'; // Hardcoded for mock service
     const transfer = this.stockTransfers.find(t => t.id === transferId);
     if (!transfer) throw new Error("Stock transfer not found");
     if (transfer.status === status) return;

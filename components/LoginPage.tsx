@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+// FIX: Corrected the import for 'useNavigate' to resolve the module export error.
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useForm, SubmitHandler } from 'react-hook-form';

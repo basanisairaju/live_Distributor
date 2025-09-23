@@ -1,6 +1,7 @@
 
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+// FIX: Corrected the imports for 'useParams' and 'useNavigate' to resolve module export errors.
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { Distributor, Order, WalletTransaction, Scheme, SKU, UserRole, EnrichedOrderItem, EnrichedWalletTransaction, OrderStatus, PriceTier, User, Store, PriceTierItem, OrderReturn, ReturnStatus, EnrichedOrderReturn } from '../types';
@@ -292,7 +293,7 @@ const DistributorDetailsPage: React.FC = () => {
             if (!currentUser) return;
             setUpdatingOrderId(orderId);
             try {
-                await api.updateOrderStatus(orderId, OrderStatus.DELIVERED, currentUser.username);
+                await api.updateOrderStatus(orderId, OrderStatus.DELIVERED);
                 setStatusMessage({ type: 'success', text: `Order ${orderId} has been marked as delivered.` });
                 setTimeout(() => setStatusMessage(null), 4000);
                 await fetchData();

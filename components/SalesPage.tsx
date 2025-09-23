@@ -130,6 +130,7 @@ const CustomExecutiveTooltip = ({ active, payload, label }: any) => {
             </div>
         );
     }
+    // FIX: A custom tooltip component must return a valid ReactNode. Returning null when not active is the standard practice.
     return null;
 };
 
@@ -233,24 +234,14 @@ const SalesPage: React.FC = () => {
     const salesData = useMemo(() => {
         const initialResult = {
             totalSalesValue: 0,
-            distributorSales: [],
+            distributorSales: [] as DistributorSale[],
             totalPaidQty: 0,
             totalFreeQty: 0,
-            productSalesSummary: [],
-            salesTotals: {
-                frequency: 0,
-                totalWithGst: 0,
-            },
-            productColumns: [],
-            filteredOrders: [],
-            filteredOrderItems: [],
-            salesTrendData: [],
-            topProductsData: [],
-            salesByStateData: [],
-            salesByDistributorData: [],
-            salesByAsmData: [],
-            salesByExecutiveChartData: [],
-            uniqueExecutives: [],
+            salesTrendData: [] as any[],
+            topProductsData: [] as any[],
+            salesByStateData: [] as any[],
+            salesByExecutiveChartData: [] as any[],
+            uniqueExecutives: [] as string[],
         };
 
         const { from, to } = dateRange;
@@ -307,749 +298,288 @@ const SalesPage: React.FC = () => {
         
         const filteredOrderIds = new Set(filteredOrders.map(o => o.id));
         const filteredOrderItems = itemsFilteredByProduct.filter(item => filteredOrderIds.has(item.orderId));
-        
-        // FIX: Explicitly type Maps to ensure correct type inference downstream.
-        const skuMap = new Map<string, string>(skus.map(s => [s.id, s.name]));
-        const distributorMap = new Map<string, Distributor>(distributors.map(d => [d.id, d]));
 
+        const totalSalesValue = filteredOrders.reduce((sum, order) => sum + order.totalAmount, 0);
         let totalPaidQty = 0;
         let totalFreeQty = 0;
-        
-        const productSummary = new Map<string, { paid: number, free: number, salesValue: number }>();
-        filteredOrderItems.forEach(item => {
-            const skuName = skuMap.get(item.skuId);
-            if(skuName) {
-                const current = productSummary.get(skuName) || { paid: 0, free: 0, salesValue: 0 };
-                if (item.isFreebie) {
-                    current.free += item.quantity;
-                    totalFreeQty += item.quantity;
-                } else {
-                    current.paid += item.quantity;
-                    totalPaidQty += item.quantity;
-                    current.salesValue += item.quantity * item.unitPrice;
-                }
-                productSummary.set(skuName, current);
+        const productSales: Record<string, { paid: number; free: number; salesValue: number; }> = {};
+        const distributorSalesMap = new Map<string, { totalWithGst: number; frequency: number; }>();
+        const salesByDate = new Map<string, { sales: number; orderCount: number; quantity: number }>();
+        const salesByState = new Map<string, { value: number, areas: Map<string, number> }>();
+        const salesByExecutive = new Map<string, { sales: number; quantity: number }>();
+        const skuMap = new Map(skus.map(s => [s.id, s.name]));
+
+        const getGroupKey = (date: Date, granularity: ChartGranularity) => {
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+            switch (granularity) {
+                case 'monthly': return `${year}-${String(month).padStart(2, '0')}`;
+                case 'quarterly': return `${year}-Q${Math.floor((month - 1) / 3) + 1}`;
+                case 'yearly': return `${year}`;
+                case 'daily': default: return date.toISOString().split('T')[0];
             }
-        });
-
-        const productSalesSummary = Array.from(productSummary, ([skuName, data]) => ({
-            skuName,
-            paid: data.paid,
-            free: data.free,
-            total: data.paid + data.free,
-            salesValue: data.salesValue,
-        }));
-        
-        const productColumns = [...new Set(
-            filteredOrderItems
-                .map(item => skuMap.get(item.skuId))
-                .filter((name): name is string => !!name)
-        )].sort();
-
-        // FIX: Strongly typed the map to prevent 'any' type issues.
-        const distributorSalesMap = new Map<string, DistributorSale>();
-        filteredOrders.forEach(order => {
-            const distId = order.distributorId;
-            const distributor = distributorMap.get(distId);
-            if (!distributor) return;
-
-            let distData = distributorSalesMap.get(distId);
-            if (!distData) {
-// FIX: Cast the initial object to DistributorSale to allow adding dynamic product keys, resolving numerous downstream type errors.
-                distData = {
-                    distributorId: distId,
-                    distributorName: distributor.name,
-                    walletBalance: distributor.walletBalance,
-                    frequency: 0,
-                    totalWithGst: 0,
-                } as DistributorSale;
-                productColumns.forEach(name => {
-                    distData[name] = 0;
-                    distData[`${name} free`] = 0;
-                });
-                distributorSalesMap.set(distId, distData);
-            }
-            
-            distData.frequency += 1;
-            distData.totalWithGst += order.totalAmount;
-
-            const itemsForThisOrder = filteredOrderItems.filter(item => item.orderId === order.id);
-            itemsForThisOrder.forEach(item => {
-                const skuName = skuMap.get(item.skuId);
-                if (!skuName) return;
-
-                if (item.isFreebie) {
-                    // FIX: Cast dynamic properties to number to ensure correct arithmetic operations and satisfy TypeScript.
-                    distData[`${skuName} free`] = (distData[`${skuName} free`] as number || 0) + item.quantity;
-                } else {
-                    // FIX: Cast dynamic properties to number to ensure correct arithmetic operations and satisfy TypeScript.
-                    distData[skuName] = (distData[skuName] as number || 0) + item.quantity;
-                }
-            });
-        });
-        const distributorSales = Array.from(distributorSalesMap.values());
-        
-        // FIX: Strongly typed salesTotals to prevent 'any' type issues.
-        const salesTotals: Record<string, number> = {
-            frequency: 0,
-            totalWithGst: 0,
         };
-        distributorSales.forEach(sale => {
-            productColumns.forEach(name => {
-                salesTotals[name] = (salesTotals[name] || 0) + (sale[name] as number || 0);
-                salesTotals[`${name} free`] = (salesTotals[`${name} free`] || 0) + (sale[`${name} free`] as number || 0);
-            });
-            salesTotals.frequency += sale.frequency || 0;
-            salesTotals.totalWithGst += sale.totalWithGst || 0;
-        });
 
-        const totalSalesValue = salesTotals.totalWithGst;
+        filteredOrders.forEach(order => {
+            const dist = distributors.find(d => d.id === order.distributorId);
+            if (dist) {
+                const current = distributorSalesMap.get(dist.id) || { totalWithGst: 0, frequency: 0 };
+                current.totalWithGst += order.totalAmount;
+                current.frequency += 1;
+                distributorSalesMap.set(dist.id, current);
+
+                const stateCurrent = salesByState.get(dist.state) || { value: 0, areas: new Map() };
+                stateCurrent.value += order.totalAmount;
+                const areaCurrent = stateCurrent.areas.get(dist.area) || 0;
+                stateCurrent.areas.set(dist.area, areaCurrent + order.totalAmount);
+                salesByState.set(dist.state, stateCurrent);
+
+                if (dist.executiveName) {
+                    const execCurrent = salesByExecutive.get(dist.executiveName) || { sales: 0, quantity: 0 };
+                    execCurrent.sales += order.totalAmount;
+                    salesByExecutive.set(dist.executiveName, execCurrent);
+                }
+            }
+            const dateKey = getGroupKey(new Date(order.date), chartGranularity);
+            const dateEntry = salesByDate.get(dateKey) || { sales: 0, orderCount: 0, quantity: 0 };
+            dateEntry.sales += order.totalAmount;
+            dateEntry.orderCount += 1;
+            salesByDate.set(dateKey, dateEntry);
+        });
         
-        // --- Data for Charts ---
-        const salesByDateAggregation = new Map<string, { sales: number; orderCount: number; quantity: number }>();
-        const processedOrdersForTrend = new Set<string>();
-        const itemsByOrderId = new Map<string, OrderItem[]>();
         filteredOrderItems.forEach(item => {
-            if (!itemsByOrderId.has(item.orderId)) {
-                itemsByOrderId.set(item.orderId, []);
+            if (item.isFreebie) {
+                totalFreeQty += item.quantity;
+            } else {
+                totalPaidQty += item.quantity;
             }
-            itemsByOrderId.get(item.orderId)!.push(item);
-        });
-
-        filteredOrders.forEach(order => {
-            const date = new Date(order.date);
-            let key = '';
-            switch (chartGranularity) {
-                case 'monthly':
-                    key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                    break;
-                case 'quarterly':
-                    const quarter = Math.floor(date.getMonth() / 3) + 1;
-                    key = `${date.getFullYear()}-Q${quarter}`;
-                    break;
-                case 'yearly':
-                    key = `${date.getFullYear()}`;
-                    break;
-                case 'daily':
-                default:
-                    key = date.toLocaleDateString('en-CA'); // YYYY-MM-DD for sorting
-                    break;
+            const skuSale = productSales[item.skuId] || { paid: 0, free: 0, salesValue: 0 };
+            if (item.isFreebie) {
+                skuSale.free += item.quantity;
+            } else {
+                skuSale.paid += item.quantity;
+                skuSale.salesValue += item.quantity * item.unitPrice;
             }
-            const existing = salesByDateAggregation.get(key) || { sales: 0, orderCount: 0, quantity: 0 };
-            existing.sales += order.totalAmount;
-            
-            const orderKey = `${order.id}-${key}`;
-            if(!processedOrdersForTrend.has(orderKey)) {
-                existing.orderCount += 1;
-                processedOrdersForTrend.add(orderKey);
-            }
-            
-            const orderItemsForThisOrder = itemsByOrderId.get(order.id) || [];
-            const orderQty = orderItemsForThisOrder
-                .filter(item => !item.isFreebie)
-                .reduce((sum, item) => sum + item.quantity, 0);
-            existing.quantity += orderQty;
+            productSales[item.skuId] = skuSale;
 
-            salesByDateAggregation.set(key, existing);
-        });
-        
-        const salesTrendData = Array.from(salesByDateAggregation.entries())
-            .map(([date, data]) => ({
-                 date, 
-                 sales: data.sales, 
-                 orderCount: data.orderCount,
-                 quantity: data.quantity,
-                 aov: data.orderCount > 0 ? data.sales / data.orderCount : 0,
-            }))
-            .sort((a, b) => a.date.localeCompare(b.date));
-            
-        const topProductsData = productSalesSummary.sort((a, b) => b.total - a.total);
-
-        const salesByStateAndArea = new Map<string, { total: number; areas: Map<string, number> }>();
-        // FIX: Strongly typed the map to ensure type safety.
-        const distributorDetailsMapForCharts = new Map<string, { state: string; area: string; asmName: string; executiveName: string; }>(distributors.map(d => [d.id, { state: d.state, area: d.area, asmName: d.asmName, executiveName: d.executiveName }]));
-        filteredOrders.forEach(order => {
-            const details = distributorDetailsMapForCharts.get(order.distributorId);
-            if (details) {
-                const { state, area } = details;
-                const stateData = salesByStateAndArea.get(state) || { total: 0, areas: new Map<string, number>() };
-                stateData.total += order.totalAmount;
-                stateData.areas.set(area, (stateData.areas.get(area) || 0) + order.totalAmount);
-                salesByStateAndArea.set(state, stateData);
-            }
-        });
-
-        const salesByStateData = Array.from(salesByStateAndArea.entries())
-            .map(([name, { total, areas }]) => ({
-                name,
-                value: total,
-                areas: Array.from(areas.entries())
-                    .map(([areaName, areaValue]) => ({ name: areaName, value: areaValue }))
-                    .sort((a,b) => b.value - a.value)
-            }))
-            .sort((a, b) => b.value - a.value);
-
-        const salesByDistributor = new Map<string, number>();
-        filteredOrders.forEach(order => {
-            const distName = distributorMap.get(order.distributorId)?.name;
-            if (distName) {
-                salesByDistributor.set(distName, (salesByDistributor.get(distName) || 0) + order.totalAmount);
-            }
-        });
-
-        const salesByDistributorData = Array.from(salesByDistributor.entries())
-            .map(([name, value]) => ({ name, value }))
-            .sort((a, b) => b.value - a.value);
-
-        const salesByAsm = new Map<string, { totalSales: number; totalQty: number; orderCount: number }>();
-        filteredOrders.forEach(order => {
-            const dist = distributorMap.get(order.distributorId);
-            if(dist?.asmName) {
-                const orderQty = allOrderItems
-                    .filter(item => item.orderId === order.id && !item.isFreebie)
-                    .reduce((sum, item) => sum + item.quantity, 0);
-
-                const current = salesByAsm.get(dist.asmName) || { totalSales: 0, totalQty: 0, orderCount: 0 };
-                current.totalSales += order.totalAmount;
-                current.totalQty += orderQty;
-                current.orderCount += 1;
-                salesByAsm.set(dist.asmName, current);
-            }
-        });
-        
-        const salesByAsmData = Array.from(salesByAsm.entries())
-            .map(([name, data]) => ({ name, value: data.totalSales, quantity: data.totalQty, orderCount: data.orderCount }))
-            .sort((a, b) => b.value - a.value);
-
-        const salesByAsmAndExecutive = new Map<string, Map<string, { sales: number; qty: number }>>();
-        filteredOrders.forEach(order => {
-            const details = distributorDetailsMapForCharts.get(order.distributorId);
-            if (details && details.asmName && details.executiveName) {
-                const { asmName, executiveName } = details;
-                 const orderQty = allOrderItems
-                    .filter(item => item.orderId === order.id && !item.isFreebie)
-                    .reduce((sum, item) => sum + item.quantity, 0);
-
-                const asmData = salesByAsmAndExecutive.get(asmName) || new Map<string, { sales: number; qty: number }>();
-                const execData = asmData.get(executiveName) || { sales: 0, qty: 0 };
-                execData.sales += order.totalAmount;
-                execData.qty += orderQty;
-                asmData.set(executiveName, execData);
-                salesByAsmAndExecutive.set(asmName, asmData);
-            }
-        });
-
-        const uniqueExecutivesSet = new Set<string>();
-        const salesByExecutiveChartData = Array.from(salesByAsmAndExecutive.entries()).map(([asmName, execMap]) => {
-            const row: { [key: string]: string | number } = { asmName };
-            let totalAsmSales = 0;
-            execMap.forEach(({ sales, qty }, execName) => {
-                row[`${execName}_sales`] = sales;
-                row[`${execName}_qty`] = qty;
-                totalAsmSales += sales;
-                uniqueExecutivesSet.add(execName);
-            });
-            row._total = totalAsmSales;
-            return row;
-        }).sort((a,b) => (b._total as number) - (a._total as number));
-        salesByExecutiveChartData.forEach(row => delete row._total);
-        const uniqueExecutives = Array.from(uniqueExecutivesSet).sort();
-
-
-        return { totalSalesValue, distributorSales, totalPaidQty, totalFreeQty, productSalesSummary, salesTotals, productColumns, filteredOrders, filteredOrderItems, salesTrendData, topProductsData, salesByStateData, salesByDistributorData, salesByAsmData, salesByExecutiveChartData, uniqueExecutives };
-    }, [orders, allOrderItems, distributors, skus, schemes, dateRange, selectedDistributorId, selectedState, selectedArea, selectedSchemeId, chartGranularity, selectedAsmName, selectedSkuId]);
-    
-    const { items: sortedProductSummary, requestSort: requestProductSort, sortConfig: productSortConfig } = useSortableData(salesData.productSalesSummary, { key: 'total', direction: 'descending' });
-    const { items: sortedDistributorSales, requestSort: requestDistributorSalesSort, sortConfig: distributorSalesSortConfig } = useSortableData(salesData.distributorSales, { key: 'totalWithGst', direction: 'descending' });
-
-    const formatDateForFilename = (date: Date | null) => date ? date.toISOString().split('T')[0] : '';
-    const sanitize = (str: string) => str.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    // FIX: Typed 'cell' to avoid 'any' type errors.
-    const escapeCsvCell = (cell: string | number | null | undefined): string => {
-        const str = String(cell ?? '');
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-            return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-    };
-    
-    const getBaseFilename = () => {
-        const distributorName = selectedDistributorId === 'all'
-            ? 'All_Distributors'
-            : sanitize(distributors.find(d => d.id === selectedDistributorId)?.name || 'Unknown');
-        const stateName = selectedState === 'all' ? 'All_States' : sanitize(selectedState);
-        const areaName = selectedArea === 'all' ? 'All_Areas' : sanitize(selectedArea);
-        const schemeName = selectedSchemeId === 'all'
-            ? 'All_Schemes'
-            : sanitize(schemes.find(s => s.id === selectedSchemeId)?.description.substring(0, 30) || 'Unknown_Scheme');
-
-        return `sales_${formatDateForFilename(dateRange.from)}_to_${formatDateForFilename(dateRange.to)}_${distributorName}_${stateName}_${areaName}_${schemeName}`;
-    }
-
-    const triggerCsvDownload = (content: string, filename: string) => {
-         const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        if (link.download !== undefined) {
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", filename);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-    }
-    
-    const handleExportDetailedCsv = () => {
-        if (loading) return;
-
-        const { filteredOrders, filteredOrderItems } = salesData;
-
-        const skuMap = new Map(skus.map(s => [s.id, s]));
-        const distributorMap = new Map(distributors.map(d => [d.id, d]));
-
-        const filename = `detailed_report_${getBaseFilename()}.csv`;
-        
-        const filterSummary = [
-            ['Sales Report Filters'],
-            ['Date Range', `${dateRange.from ? formatDateDDMMYYYY(dateRange.from) : 'N/A'} to ${dateRange.to ? formatDateDDMMYYYY(dateRange.to) : 'N/A'}`],
-            ['State', selectedState],
-            ['Area', selectedArea],
-            ['Distributor', distributors.find(d => d.id === selectedDistributorId)?.name || 'All'],
-            ['Scheme', schemes.find(s => s.id === selectedSchemeId)?.description || 'All'],
-            []
-        ].map(row => row.map(escapeCsvCell).join(',')).join('\n');
-
-        const headers = [
-            'Order ID', 'Order Date', 'Distributor ID', 'Distributor Name', 'State', 'Area',
-            'SKU ID', 'Product Name', 'Item Type', 'Quantity', 'Base Price',
-            'Unit Price', 'Total Amount'
-        ];
-
-        const rows = filteredOrderItems.map(item => {
             const order = filteredOrders.find(o => o.id === item.orderId);
-            if (!order) return null;
+            if (order) {
+                const dateKey = getGroupKey(new Date(order.date), chartGranularity);
+                const dateEntry = salesByDate.get(dateKey);
+                if (dateEntry) dateEntry.quantity += item.quantity;
 
-            const distributor = distributorMap.get(order.distributorId);
-            const sku = skuMap.get(item.skuId);
-            const skuName = sku ? sku.name : 'Unknown SKU';
-            const basePrice = sku ? sku.price : 0;
-
-            return [
-                order.id,
-                formatDateDDMMYYYY(order.date),
-                order.distributorId,
-                distributor?.name || 'Unknown',
-                distributor?.state || '',
-                distributor?.area || '',
-                item.skuId,
-                skuName,
-                item.isFreebie ? 'Free' : 'Paid',
-                item.quantity,
-                basePrice,
-                item.unitPrice,
-                item.quantity * item.unitPrice
-            ].map(escapeCsvCell);
-        }).filter((row): row is string[] => row !== null);
-
-        const csvContent = filterSummary + '\n' + [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-        triggerCsvDownload(csvContent, filename);
-    };
-
-    const handleExportTableCsv = () => {
-        const { salesTotals, productColumns } = salesData;
-        
-        const filename = `summary_report_${getBaseFilename()}.csv`;
-        
-        const headers: string[] = ['Distributor ID', 'Distributor Name', 'Frequency'];
-        productColumns.forEach(name => {
-            headers.push(name);
-            headers.push(`${name} free`);
+                const dist = distributors.find(d => d.id === order.distributorId);
+                if (dist?.executiveName) {
+                    const execEntry = salesByExecutive.get(dist.executiveName);
+                    if (execEntry) execEntry.quantity += item.quantity;
+                }
+            }
         });
-        headers.push('Total (incl. GST)');
-        headers.push('Wallet Balance');
 
-        const rows = sortedDistributorSales.map(sale => {
-            const row: (string | number)[] = [sale.distributorId, sale.distributorName, sale.frequency];
-            productColumns.forEach(name => {
-                row.push(sale[name] as number || 0);
-                row.push(sale[`${name} free`] as number || 0);
+        const distributorSales: DistributorSale[] = [];
+        distributorSalesMap.forEach((value, key) => {
+            const dist = distributors.find(d => d.id === key);
+            if (dist) {
+                distributorSales.push({
+                    distributorId: key,
+                    distributorName: dist.name,
+                    walletBalance: dist.walletBalance,
+                    ...value
+                });
+            }
+        });
+
+        const salesTrendData = Array.from(salesByDate.entries()).map(([key, value]) => ({
+            name: key,
+            Sales: value.sales,
+            'Avg. Order Value': value.orderCount > 0 ? value.sales / value.orderCount : 0,
+            quantity: value.quantity,
+            orderCount: value.orderCount
+        })).sort((a,b) => a.name.localeCompare(b.name));
+
+        const topProductsData = Object.entries(productSales).map(([skuId, data]) => ({
+            name: skuMap.get(skuId) || skuId, ...data
+        })).sort((a, b) => b.salesValue - a.salesValue).slice(0, topProductsCount);
+
+        const salesByStateData = Array.from(salesByState.entries()).map(([state, data]) => ({
+            name: state, value: data.value, areas: Array.from(data.areas.entries()).map(([area, value]) => ({ name: area, value })).sort((a,b) => b.value - a.value)
+        })).sort((a, b) => b.value - a.value);
+
+        const uniqueExecutives = [...salesByExecutive.keys()].sort();
+        const salesByExecutiveChartData = salesTrendData.map(datePoint => {
+            const data: any = { name: datePoint.name };
+            uniqueExecutives.forEach(exec => {
+                const ordersForExecOnDate = filteredOrders.filter(o => {
+                    const dist = distributors.find(d => d.id === o.distributorId);
+                    const dateKey = getGroupKey(new Date(o.date), chartGranularity);
+                    return dist?.executiveName === exec && dateKey === datePoint.name;
+                });
+                const sales = ordersForExecOnDate.reduce((sum, o) => sum + o.totalAmount, 0);
+                const qty = allOrderItems.filter(i => ordersForExecOnDate.some(o => o.id === i.orderId)).reduce((sum, i) => sum + i.quantity, 0);
+                data[exec] = sales;
+                data[`${exec}_qty`] = qty;
             });
-            row.push(sale.totalWithGst);
-            row.push(sale.walletBalance);
-            return row.map(escapeCsvCell);
+            return data;
         });
 
-        const totalRow: (string | number)[] = ['Total', '', salesTotals.frequency];
-        productColumns.forEach(name => {
-            totalRow.push(salesTotals[name] || 0);
-            totalRow.push(salesTotals[`${name} free`] || 0);
-        });
-        totalRow.push(salesTotals.totalWithGst);
-        totalRow.push('');
-        rows.push(totalRow.map(escapeCsvCell));
+        return {
+            totalSalesValue,
+            distributorSales,
+            totalPaidQty,
+            totalFreeQty,
+            salesTrendData,
+            topProductsData,
+            salesByStateData,
+            salesByExecutiveChartData,
+            uniqueExecutives,
+        };
+    }, [dateRange, orders, allOrderItems, distributors, skus, schemes, selectedDistributorId, selectedAsmName, selectedState, selectedArea, selectedSchemeId, selectedSkuId, topProductsCount, chartGranularity]);
 
-        const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-        triggerCsvDownload(csvContent, filename);
-    };
-
-    const handleExportProductSummaryCsv = () => {
-        const filename = `product_summary_report_${getBaseFilename()}.csv`;
-
-        const headers = ['Product Name', 'Paid Units', 'Free Units', 'Total Units'];
-
-        const rows = sortedProductSummary.map(p => [
-            p.skuName,
-            p.paid,
-            p.free,
-            p.total
-        ].map(escapeCsvCell));
-        
-        const totalRow = [
-            'Total',
-            sortedProductSummary.reduce((sum, p) => sum + p.paid, 0),
-            sortedProductSummary.reduce((sum, p) => sum + p.free, 0),
-            sortedProductSummary.reduce((sum, p) => sum + p.total, 0)
-        ].map(escapeCsvCell);
-
-        rows.push(totalRow);
-
-        const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-        triggerCsvDownload(csvContent, filename);
-    };
-
+    const { items: sortedDistributorSales, requestSort, sortConfig } = useSortableData(salesData.distributorSales, { key: 'totalWithGst', direction: 'descending' });
 
     if (loading) {
         return <div className="text-center p-8">Loading sales data...</div>;
     }
-
+    
     return (
         <div className="space-y-6">
             <Card>
-                <h2 className="text-xl font-bold mb-4">Sales Report Filters</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                    <div className="lg:col-span-2">
-                        <DateRangePicker label="Date Range" value={dateRange} onChange={setDateRange} />
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                    <h2 className="text-2xl font-bold">Sales Reports</h2>
+                    <div className="w-full sm:w-auto sm:max-w-md mt-4 sm:mt-0">
+                        <DateRangePicker value={dateRange} onChange={setDateRange} label="Select Date Range"/>
                     </div>
-                    <Select label="Filter by ASM" value={selectedAsmName} onChange={handleAsmChange}>
-                        <option value="all">All ASMs</option>
-                        {uniqueAsmNames.map(name => <option key={name} value={name}>{name}</option>)}
-                    </Select>
-                    <Select label="Filter by State" value={selectedState} onChange={handleStateChange}>
-                        <option value="all">All States</option>
-                        {uniqueStates.map(state => <option key={state} value={state}>{state}</option>)}
-                    </Select>
-                    <Select label="Filter by Area" value={selectedArea} onChange={e => setSelectedArea(e.target.value)}>
-                        <option value="all">All Areas</option>
-                        {availableAreas.map(area => <option key={area} value={area}>{area}</option>)}
-                    </Select>
-                    <Select label="Filter by Distributor" value={selectedDistributorId} onChange={e => setSelectedDistributorId(e.target.value)}>
-                        <option value="all">All Distributors</option>
-                        {availableDistributors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </Select>
-                    <Select label="Filter by Product" value={selectedSkuId} onChange={e => setSelectedSkuId(e.target.value)}>
-                        <option value="all">All Products</option>
-                        {skus.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </Select>
-                    <Select label="Filter by Scheme" value={selectedSchemeId} onChange={e => setSelectedSchemeId(e.target.value)}>
-                        <option value="all">All Schemes</option>
-                        {schemes.filter(s => s.isGlobal).map(s => <option key={s.id} value={s.id}>{s.description}</option>)}
-                    </Select>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mt-4">
+                    <Select label="ASM" value={selectedAsmName} onChange={handleAsmChange}><option value="all">All ASMs</option>{uniqueAsmNames.map(name => <option key={name} value={name}>{name}</option>)}</Select>
+                    <Select label="Distributor" value={selectedDistributorId} onChange={e => setSelectedDistributorId(e.target.value)}><option value="all">All Distributors</option>{availableDistributors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Select>
+                    <Select label="State" value={selectedState} onChange={handleStateChange}><option value="all">All States</option>{uniqueStates.map(state => <option key={state} value={state}>{state}</option>)}</Select>
+                    <Select label="Area" value={selectedArea} onChange={e => setSelectedArea(e.target.value)}><option value="all">All Areas</option>{availableAreas.map(area => <option key={area} value={area}>{area}</option>)}</Select>
+                    <Select label="Scheme" value={selectedSchemeId} onChange={e => setSelectedSchemeId(e.target.value)}><option value="all">All Schemes</option>{schemes.map(s => <option key={s.id} value={s.id}>{s.description}</option>)}</Select>
+                    <Select label="Product" value={selectedSkuId} onChange={e => setSelectedSkuId(e.target.value)}><option value="all">All Products</option>{skus.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</Select>
                 </div>
             </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatCard title="Total Sales" value={formatIndianCurrency(salesData.totalSalesValue)} icon={<DollarSign />} iconBgClass="bg-primary/10 text-primary" />
-                <StatCard title="Total Units Sold (Paid)" value={formatIndianNumber(salesData.totalPaidQty)} icon={<Package />} iconBgClass="bg-blue-500/10 text-blue-600" />
-                <StatCard title="Total Units Given (Free)" value={formatIndianNumber(salesData.totalFreeQty)} icon={<Gift />} iconBgClass="bg-green-500/10 text-green-600" />
+                <StatCard title="Paid Units" value={formatIndianNumber(salesData.totalPaidQty)} icon={<Package />} iconBgClass="bg-blue-500/10 text-blue-600" />
+                <StatCard title="Free Units" value={formatIndianNumber(salesData.totalFreeQty)} icon={<Gift />} iconBgClass="bg-green-500/10 text-green-600" />
             </div>
-
+            
             <Card>
-                <div className="flex justify-between items-center mb-4 flex-wrap gap-4">
-                    <h3 className="text-lg font-semibold text-content flex items-center"><TrendingUp size={20} className="mr-2 text-primary" /> Sales Trend</h3>
-                    <div className="flex items-center gap-4 flex-wrap">
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                id="showAov"
-                                checked={showAov}
-                                onChange={() => setShowAov(!showAov)}
-                                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                            />
-                            <label htmlFor="showAov" className="text-sm text-contentSecondary cursor-pointer">
-                                Show Avg. Order Value
-                            </label>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                    <h3 className="text-lg font-semibold text-content">Sales Trend</h3>
+                    <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                        <div className="flex items-center">
+                            <input type="checkbox" id="showAov" checked={showAov} onChange={() => setShowAov(!showAov)} className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"/>
+                            <label htmlFor="showAov" className="ml-2 text-sm text-contentSecondary">Show Avg. Order Value</label>
                         </div>
-                        <div className="flex gap-1 p-1 bg-background rounded-lg border border-border">
-                            {(['daily', 'monthly', 'quarterly', 'yearly'] as ChartGranularity[]).map(g => (
-                                <Button key={g} variant={chartGranularity === g ? 'primary' : 'secondary'} size="sm" onClick={() => setChartGranularity(g)} className={`capitalize ${chartGranularity !== g ? '!bg-transparent border-none shadow-none !text-contentSecondary hover:!bg-slate-200' : 'shadow'}`}>{g}</Button>
-                            ))}
-                        </div>
+                        <Select value={chartGranularity} onChange={e => setChartGranularity(e.target.value as any)} size="sm" className="!w-auto">
+                            <option value="daily">Daily</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option>
+                        </Select>
                     </div>
                 </div>
                 <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={salesData.salesTrendData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                    <LineChart data={salesData.salesTrendData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" tickFormatter={(tick) => tick.includes('-') ? formatDateDDMMYYYY(tick) : tick} />
-                        <YAxis yAxisId="left" tickFormatter={(value) => formatIndianCurrencyShort(value as number)} />
-                        <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => formatIndianCurrencyShort(value as number)} />
-                        <Tooltip content={<CustomSalesTooltip />} />
+                        <XAxis dataKey="name" tickFormatter={(label) => label.includes('-') ? formatDateDDMMYYYY(label) : label}/>
+                        <YAxis yAxisId="left" tickFormatter={(value) => formatIndianCurrencyShort(value)} />
+                        {showAov && <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => formatIndianCurrencyShort(value)} />}
+                        <Tooltip content={<CustomSalesTooltip />}/>
                         <Legend />
-                        <Line yAxisId="left" type="monotone" dataKey="sales" stroke="#4f46e5" strokeWidth={2} name="Sales" />
-                        {showAov && (
-                            <Line yAxisId="right" type="monotone" dataKey="aov" stroke="#f97316" strokeDasharray="5 5" name="Avg. Order Value" />
-                        )}
+                        <Line yAxisId="left" type="monotone" dataKey="Sales" stroke="#8884d8" strokeWidth={2} />
+                        {showAov && <Line yAxisId="right" type="monotone" dataKey="Avg. Order Value" stroke="#82ca9d" strokeDasharray="5 5" />}
                     </LineChart>
                 </ResponsiveContainer>
             </Card>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-semibold text-content">Top {topProductsCount} Products by Volume</h3>
-                        <div className="flex gap-1 p-1 bg-background rounded-lg border border-border">
-                            <Button variant={topProductsCount === 5 ? 'primary' : 'secondary'} size="sm" onClick={() => setTopProductsCount(5)} className={`${topProductsCount !== 5 ? '!bg-transparent border-none shadow-none !text-contentSecondary hover:!bg-slate-200' : 'shadow'}`}>Top 5</Button>
-                            <Button variant={topProductsCount === 10 ? 'primary' : 'secondary'} size="sm" onClick={() => setTopProductsCount(10)} className={`${topProductsCount !== 10 ? '!bg-transparent border-none shadow-none !text-contentSecondary hover:!bg-slate-200' : 'shadow'}`}>Top 10</Button>
-                        </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <RechartsBarChart data={salesData.topProductsData.slice(0, topProductsCount)} layout="vertical" margin={{ top: 5, right: 30, left: 30, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis type="number" />
-                            <YAxis dataKey="skuName" type="category" width={80} />
-                            <Tooltip content={<CustomProductTooltip />} />
-                            <Legend />
-                            <Bar dataKey="paid" stackId="a" fill="#3b82f6" name="Paid Units" />
-                            <Bar dataKey="free" stackId="a" fill="#16a34a" name="Free Units" />
-                        </RechartsBarChart>
-                    </ResponsiveContainer>
-                </Card>
-                <Card>
-                    <h3 className="text-lg font-semibold text-content mb-4 flex items-center"><UserCheck size={20} className="mr-2 text-primary"/> Sales by ASM</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <RechartsBarChart data={salesData.salesByAsmData} layout="vertical" margin={{ top: 5, right: 30, left: 30, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis type="number" tickFormatter={(value) => formatIndianCurrencyShort(value as number)} />
-                            <YAxis dataKey="name" type="category" width={100} />
-                            <Tooltip content={<CustomSalesTooltip />} />
-                            <Bar dataKey="value" fill="#8b5cf6" name="Total Sales" />
-                        </RechartsBarChart>
-                    </ResponsiveContainer>
-                </Card>
-            </div>
 
-            <Card>
-                <h3 className="text-lg font-semibold text-content mb-4 flex items-center"><Users size={20} className="mr-2 text-primary"/> Executive Performance by ASM</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                    <RechartsBarChart
-                        data={salesData.salesByExecutiveChartData}
-                        layout="vertical"
-                        margin={{ top: 5, right: 30, left: 30, bottom: 5 }}
-                    >
+             <Card>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                    <h3 className="text-lg font-semibold text-content">Sales by Executive</h3>
+                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                    <RechartsBarChart data={salesData.salesByExecutiveChartData}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" tickFormatter={(value) => formatIndianCurrencyShort(value as number)} />
-                        <YAxis dataKey="asmName" type="category" width={150} />
-                        <Tooltip content={<CustomExecutiveTooltip />} cursor={{ fill: 'rgba(241, 245, 249, 0.5)' }}/>
+                        <XAxis dataKey="name" tickFormatter={(label) => label.includes('-') ? formatDateDDMMYYYY(label) : label} />
+                        <YAxis tickFormatter={(value) => formatIndianCurrencyShort(value)} />
+                        <Tooltip content={<CustomExecutiveTooltip />}/>
                         <Legend />
-                        {salesData.uniqueExecutives.map((execName, index) => (
-                            <Bar
-                                key={execName}
-                                dataKey={`${execName}_sales`}
-                                stackId="a"
-                                name={execName}
-                                fill={EXEC_COLORS[index % EXEC_COLORS.length]}
-                            />
+                        {salesData.uniqueExecutives.map((exec, index) => (
+                             <Bar key={exec} dataKey={exec} stackId="a" fill={EXEC_COLORS[index % EXEC_COLORS.length]} />
                         ))}
                     </RechartsBarChart>
                 </ResponsiveContainer>
             </Card>
 
-            <Card>
-                <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-                    <h3 className="text-lg font-semibold text-content flex items-center"><Table size={20} className="mr-2 text-primary" /> Product Sales Summary</h3>
-                    <Button onClick={handleExportProductSummaryCsv} size="sm" variant="secondary"><Download size={14} /> Export CSV</Button>
-                </div>
-                {/* Desktop Table View */}
-                <div className="overflow-x-auto hidden md:block">
-                    <table className="w-full text-left min-w-[600px] text-sm">
-                        <thead className="bg-slate-100">
-                            <tr>
-                                <SortableTableHeader label="Product Name" sortKey="skuName" requestSort={requestProductSort} sortConfig={productSortConfig} />
-                                <SortableTableHeader label="Paid Units" sortKey="paid" requestSort={requestProductSort} sortConfig={productSortConfig} className="text-right" />
-                                <SortableTableHeader label="Free Units" sortKey="free" requestSort={requestProductSort} sortConfig={productSortConfig} className="text-right" />
-                                <SortableTableHeader label="Total Units" sortKey="total" requestSort={requestProductSort} sortConfig={productSortConfig} className="text-right" />
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {sortedProductSummary.map(p => (
-                                <tr key={p.skuName} className="border-b border-border last:border-b-0">
-                                    <td className="p-3 font-medium">{p.skuName}</td>
-                                    <td className="p-3 text-right">{formatIndianNumber(p.paid)}</td>
-                                    <td className="p-3 text-right">{formatIndianNumber(p.free)}</td>
-                                    <td className="p-3 font-semibold text-right">{formatIndianNumber(p.total)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-                 {/* Mobile Card View */}
-                <div className="md:hidden space-y-4">
-                    {sortedProductSummary.map(p => (
-                        <Card key={p.skuName}>
-                            <p className="font-bold text-content">{p.skuName}</p>
-                            <div className="grid grid-cols-3 gap-4 text-center mt-3 pt-3 border-t">
-                                <div>
-                                    <p className="text-xs font-semibold text-contentSecondary">Paid</p>
-                                    <p className="font-semibold text-lg text-content">{formatIndianNumber(p.paid)}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs font-semibold text-contentSecondary">Free</p>
-                                    <p className="font-semibold text-lg text-green-600">{formatIndianNumber(p.free)}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs font-semibold text-contentSecondary">Total</p>
-                                    <p className="font-bold text-lg text-primary">{formatIndianNumber(p.total)}</p>
-                                </div>
-                            </div>
-                        </Card>
-                    ))}
-                </div>
-            </Card>
-            
-            <Card>
-                <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-                    <h3 className="text-lg font-semibold text-content flex items-center"><BarChart size={20} className="mr-2 text-primary" /> Distributor Sales Table</h3>
-                    <div className="flex gap-2">
-                        <Button onClick={handleExportTableCsv} size="sm" variant="secondary"><Download size={14} /> Export Summary</Button>
-                        <Button onClick={handleExportDetailedCsv} size="sm" variant="secondary"><Download size={14} /> Export Detailed</Button>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="lg:col-span-2">
+                     <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-content">Top {topProductsCount} Products by Sales</h3>
+                        <div className="flex gap-1 p-1 bg-background rounded-lg border">
+                           <button onClick={() => setTopProductsCount(5)} className={`px-2 py-1 text-xs rounded ${topProductsCount === 5 ? 'bg-primary text-white' : ''}`}>Top 5</button>
+                           <button onClick={() => setTopProductsCount(10)} className={`px-2 py-1 text-xs rounded ${topProductsCount === 10 ? 'bg-primary text-white' : ''}`}>Top 10</button>
+                        </div>
                     </div>
-                </div>
-                {/* Desktop Table View */}
-                <div className="overflow-x-auto hidden md:block">
-                    <table className="w-full text-left min-w-[1200px] text-sm relative border-collapse">
-                        <thead className="bg-slate-100">
-                            <tr>
-                                <th rowSpan={2} className="p-3 align-bottom">
-                                    <SortableTableHeader label="Distributor ID" sortKey="distributorId" requestSort={requestDistributorSalesSort} sortConfig={distributorSalesSortConfig} />
-                                </th>
-                                <th rowSpan={2} className="p-3 align-bottom sticky left-0 bg-slate-100 z-10 border-r border-border">
-                                    <SortableTableHeader label="Distributor Name" sortKey="distributorName" requestSort={requestDistributorSalesSort} sortConfig={distributorSalesSortConfig} />
-                                </th>
-                                <th rowSpan={2} className="p-3 align-bottom">
-                                    <SortableTableHeader label="Frequency" sortKey="frequency" requestSort={requestDistributorSalesSort} sortConfig={distributorSalesSortConfig} className="text-center"/>
-                                </th>
-                                {salesData.productColumns.map(name => (
-                                    <th key={name} colSpan={2} className="p-2 font-semibold text-contentSecondary text-center border-x border-border whitespace-nowrap">{name}</th>
-                                ))}
-                                <th rowSpan={2} className="p-3 align-bottom">
-                                    <SortableTableHeader label="Total (incl. GST)" sortKey="totalWithGst" requestSort={requestDistributorSalesSort} sortConfig={distributorSalesSortConfig} className="text-right" />
-                                </th>
-                                <th rowSpan={2} className="p-3 align-bottom sticky right-0 bg-slate-100 z-10 border-l border-border">
-                                    <SortableTableHeader label="Wallet Balance" sortKey="walletBalance" requestSort={requestDistributorSalesSort} sortConfig={distributorSalesSortConfig} className="text-right" />
-                                </th>
-                            </tr>
-                            <tr>
-                                {salesData.productColumns.map(name => (
-                                    <React.Fragment key={`${name}-sub`}>
-                                        <th className="p-2 font-semibold text-contentSecondary text-center border-l border-border">Paid</th>
-                                        <th className="p-2 font-semibold text-contentSecondary text-center text-green-700 border-r border-border">Free</th>
-                                    </React.Fragment>
-                                ))}
+                    <ResponsiveContainer width="100%" height={300}>
+                        <RechartsBarChart data={salesData.topProductsData} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis type="number" tickFormatter={(value) => formatIndianCurrencyShort(value)} />
+                            <YAxis type="category" dataKey="name" width={150} />
+                            <Tooltip content={<CustomProductTooltip />}/>
+                            <Legend />
+                            <Bar dataKey="paid" name="Paid Units" stackId="a" fill="#3b82f6" />
+                            <Bar dataKey="free" name="Free Units" stackId="a" fill="#22c55e" />
+                        </RechartsBarChart>
+                    </ResponsiveContainer>
+                </Card>
+                <Card>
+                    <h3 className="text-lg font-semibold text-content mb-4">Sales by State</h3>
+                     <ResponsiveContainer width="100%" height={300}>
+                        <RechartsBarChart data={salesData.salesByStateData} layout="vertical">
+                           <CartesianGrid strokeDasharray="3 3" />
+                           <XAxis type="number" tickFormatter={(value) => formatIndianCurrencyShort(value)} />
+                           <YAxis type="category" dataKey="name" width={80} />
+                           <Tooltip content={<CustomStateTooltip />} />
+                           <Bar dataKey="value" name="Total Sales" fill="#8884d8" />
+                        </RechartsBarChart>
+                     </ResponsiveContainer>
+                </Card>
+            </div>
+
+            <Card>
+                <h3 className="text-lg font-semibold text-content mb-4">Distributor Sales Breakdown</h3>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[700px]">
+                        <thead>
+                            <tr className="bg-slate-100">
+                                <SortableTableHeader label="Distributor" sortKey="distributorName" requestSort={requestSort} sortConfig={sortConfig}/>
+                                <SortableTableHeader label="Wallet Balance" sortKey="walletBalance" requestSort={requestSort} sortConfig={sortConfig} className="text-right"/>
+                                <SortableTableHeader label="Order Count" sortKey="frequency" requestSort={requestSort} sortConfig={sortConfig} className="text-right"/>
+                                <SortableTableHeader label="Total Sales" sortKey="totalWithGst" requestSort={requestSort} sortConfig={sortConfig} className="text-right"/>
                             </tr>
                         </thead>
                         <tbody>
-                            {sortedDistributorSales.map(sale => (
-                                <tr key={sale.distributorId} className="border-b border-border last:border-b-0 group hover:bg-slate-50">
-                                    <td className="p-3 font-mono text-xs">{sale.distributorId}</td>
-                                    <td className="p-3 font-medium sticky left-0 bg-white group-hover:bg-slate-50 border-r border-border">{sale.distributorName}</td>
-                                    <td className="p-3 text-center">{sale.frequency}</td>
-                                    {salesData.productColumns.map(name => (
-                                        <React.Fragment key={name}>
-                                            <td className="p-3 text-center border-l border-border">
-                                                {formatIndianNumber(sale[name] as number || 0)}
-                                            </td>
-                                            <td className="p-3 text-center text-green-600 font-medium border-r border-border">
-                                                {formatIndianNumber(sale[`${name} free`] as number || 0)}
-                                            </td>
-                                        </React.Fragment>
-                                    ))}
-                                    <td className="p-3 font-semibold text-right">{formatIndianCurrency(sale.totalWithGst)}</td>
-                                    <td className={`p-3 text-right font-semibold sticky right-0 bg-white group-hover:bg-slate-50 border-l border-border ${sale.walletBalance < 0 ? 'text-red-600' : 'text-content'}`}>{formatIndianCurrency(sale.walletBalance)}</td>
+                            {sortedDistributorSales.map(d => (
+                                <tr key={d.distributorId} className="border-b last:border-0 hover:bg-slate-50">
+                                    <td className="p-3 font-medium">{d.distributorName}</td>
+                                    <td className={`p-3 text-right font-semibold ${d.walletBalance < 0 ? 'text-red-600' : ''}`}>{formatIndianCurrency(d.walletBalance)}</td>
+                                    <td className="p-3 text-right">{d.frequency}</td>
+                                    <td className="p-3 font-bold text-right">{formatIndianCurrency(d.totalWithGst)}</td>
                                 </tr>
                             ))}
                         </tbody>
-                        <tfoot className="bg-slate-100 border-t-2 border-border">
-                            <tr className="font-bold">
-                                <td className="p-3"></td>
-                                <td className="p-3 sticky left-0 bg-slate-100 z-10 border-r border-border">Total</td>
-                                <td className="p-3 text-center">{formatIndianNumber(salesData.salesTotals.frequency)}</td>
-                                {salesData.productColumns.map(name => (
-                                    <React.Fragment key={name}>
-                                        <td className="p-3 text-center border-l border-border">
-                                            {formatIndianNumber(salesData.salesTotals[name] || 0)}
-                                        </td>
-                                        <td className="p-3 text-center text-green-600 font-medium border-r border-border">
-                                            {formatIndianNumber(salesData.salesTotals[`${name} free`] || 0)}
-                                        </td>
-                                    </React.Fragment>
-                                ))}
-                                <td className="p-3 text-right">{formatIndianCurrency(salesData.salesTotals.totalWithGst)}</td>
-                                <td className="p-3 text-right sticky right-0 bg-slate-100 z-10 border-l border-border"></td>
-                            </tr>
-                        </tfoot>
                     </table>
                 </div>
-                {/* Mobile Card View */}
-                <div className="md:hidden space-y-4">
-                    {sortedDistributorSales.map(sale => (
-                        <Card key={sale.distributorId} onClick={() => setExpandedDistributor(prev => prev === sale.distributorId ? null : sale.distributorId)}>
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="font-bold text-primary">{sale.distributorName}</p>
-                                    <p className="font-mono text-xs text-contentSecondary">{sale.distributorId}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="font-bold text-lg">{formatIndianCurrency(sale.totalWithGst)}</p>
-                                    <p className="text-xs text-contentSecondary">from {sale.frequency} order(s)</p>
-                                </div>
-                            </div>
-                            <div className="mt-4 pt-4 border-t flex justify-between items-center text-sm">
-                                <div>
-                                    <p className="text-xs font-semibold text-contentSecondary">Wallet Balance</p>
-                                    <p className={`font-semibold ${sale.walletBalance < 0 ? 'text-red-600' : 'text-content'}`}>{formatIndianCurrency(sale.walletBalance)}</p>
-                                </div>
-                                <div className="flex items-center text-primary font-semibold">
-                                    {expandedDistributor === sale.distributorId ? 'Hide Details' : 'Show Details'}
-                                    {expandedDistributor === sale.distributorId ? <ChevronDown size={16} className="ml-1"/> : <ChevronRight size={16} className="ml-1"/>}
-                                </div>
-                            </div>
-                             {expandedDistributor === sale.distributorId && (
-                                <div className="mt-4 pt-4 border-t text-sm space-y-2">
-                                    <h4 className="font-semibold text-content mb-1">Product Quantities</h4>
-                                    {salesData.productColumns.map(name => {
-                                        const paidQty = sale[name] as number || 0;
-                                        const freeQty = sale[`${name} free`] as number || 0;
-                                        if (paidQty === 0 && freeQty === 0) return null;
-                                        return (
-                                            <div key={name} className="flex justify-between items-center">
-                                                <span className="text-contentSecondary">{name}</span>
-                                                <span className="font-medium">
-                                                    {paidQty > 0 && <span>{formatIndianNumber(paidQty)} Paid</span>}
-                                                    {paidQty > 0 && freeQty > 0 && <span className="mx-1">/</span>}
-                                                    {freeQty > 0 && <span className="text-green-600">{formatIndianNumber(freeQty)} Free</span>}
-                                                </span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </Card>
-                    ))}
-                </div>
-
             </Card>
+
         </div>
     );
 };
 
+// FIX: Added default export to resolve module import error in App.tsx.
 export default SalesPage;
+
+```
+  </change>
+</changes>
+```

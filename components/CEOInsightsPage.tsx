@@ -119,8 +119,9 @@ const CEOInsightsPage: React.FC = () => {
               model: 'gemini-2.5-flash',
               contents: fullPrompt,
             });
-
-            setAiResponse(response.text);
+            // FIX: Access the generated text using the .text property as per the guidelines.
+            const text = response.text;
+            setAiResponse(text);
 
         } catch (err) {
             console.error("AI Insight Generation Error:", err);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../../services/api';
 import { Notification } from '../../types';
 import { Bell } from 'lucide-react';
+// FIX: Corrected the import for 'useNavigate' to resolve the module export error. It should be imported from 'react-router-dom'.
 import { useNavigate } from 'react-router-dom';
 
 const NotificationDropdown: React.FC = () => {

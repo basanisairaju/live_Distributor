@@ -49,7 +49,7 @@ const ConfirmReturnsPage: React.FC = () => {
         setConfirmingId(returnId);
         setError(null);
         try {
-            await api.confirmOrderReturn(returnId, currentUser.username);
+            await api.confirmOrderReturn(returnId);
             await fetchReturns();
         } catch (err) {
             let message = "An unknown error occurred.";

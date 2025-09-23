@@ -95,7 +95,7 @@ const ReturnOrderModal: React.FC<ReturnOrderModalProps> = ({ order, onClose, onS
         setLoading(true);
         setError(null);
         try {
-            await api.initiateOrderReturn(order.id, itemsToReturn, currentUser.username, remarks);
+            await api.initiateOrderReturn(order.id, itemsToReturn, remarks);
             onSave();
             onClose();
         } catch (err) {

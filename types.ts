@@ -1,5 +1,4 @@
 
-
 export enum UserRole {
   PLANT_ADMIN = 'Plant Admin',
   ASM = 'ASM',

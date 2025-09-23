@@ -1,3 +1,5 @@
+
+
 // FIX: Changed PortalState import from hooks/useAuth to types to break a circular dependency.
 import { PortalState, CompanyDetails, DispatchNoteData, Distributor, EnrichedOrderItem, EnrichedOrderReturn, EnrichedStockItem, EnrichedStockTransfer, EnrichedStockTransferItem, EnrichedWalletTransaction, InvoiceData, Notification, Order, OrderItem, OrderReturn, OrderStatus, PriceTier, PriceTierItem, ReturnStatus, Scheme, SKU, StockItem, StockLedgerEntry, StockTransfer, StockTransferStatus, Store, User, UserRole, WalletTransaction } from "../types";
 
@@ -31,17 +33,23 @@ export interface ApiService {
   // FIX: Return the enriched type to match component state and mock implementation.
   getOrderItems(orderId: string): Promise<EnrichedOrderItem[]>;
   getAllOrderItems(portalState: PortalState | null): Promise<OrderItem[]>;
-  placeOrder(distributorId: string, items: { skuId: string; quantity: number }[], username: string): Promise<Order>;
-  updateOrderItems(orderId: string, items: { skuId: string; quantity: number }[], username: string): Promise<void>;
+  // FIX: Add username for auditing
+  placeOrder(distributorId: string, items: { skuId: string; quantity: number }[]): Promise<Order>;
+  // FIX: Add username for auditing
+  updateOrderItems(orderId: string, items: { skuId: string; quantity: number }[]): Promise<void>;
   // FIX: Use the OrderStatus enum for type safety.
-  updateOrderStatus(orderId: string, status: OrderStatus, username: string): Promise<void>;
-  deleteOrder(orderId: string, remarks: string, username: string): Promise<void>;
+  // FIX: Add username for auditing
+  updateOrderStatus(orderId: string, status: OrderStatus): Promise<void>;
+  // FIX: Add username for auditing
+  deleteOrder(orderId: string, remarks: string): Promise<void>;
 
   // Returns
-  initiateOrderReturn(orderId: string, items: { skuId: string; quantity: number }[], username: string, remarks: string): Promise<OrderReturn>;
+  // FIX: Add username for auditing
+  initiateOrderReturn(orderId: string, items: { skuId: string; quantity: number }[], remarks: string): Promise<OrderReturn>;
   // FIX: Return the enriched type to match component state and mock implementation.
   getReturns(status: ReturnStatus, portalState: PortalState | null): Promise<EnrichedOrderReturn[]>;
-  confirmOrderReturn(returnId: string, username: string): Promise<void>;
+  // FIX: Add username for auditing
+  confirmOrderReturn(returnId: string): Promise<void>;
 
   // SKUs
   getSKUs(): Promise<SKU[]>;
@@ -71,8 +79,10 @@ export interface ApiService {
   // FIX: Return the enriched type to match component state and mock implementation.
   getWalletTransactionsByDistributor(distributorId: string): Promise<EnrichedWalletTransaction[]>;
   getAllWalletTransactions(portalState: PortalState | null): Promise<EnrichedWalletTransaction[]>;
-  rechargeWallet(distributorId: string, amount: number, username: string, paymentMethod: string, remarks: string, date: string): Promise<void>;
-  rechargeStoreWallet(storeId: string, amount: number, username: string, paymentMethod: string, remarks: string, date: string): Promise<void>;
+  // FIX: Add username for auditing
+  rechargeWallet(distributorId: string, amount: number, paymentMethod: string, remarks: string, date: string): Promise<void>;
+  // FIX: Add username for auditing
+  rechargeStoreWallet(storeId: string, amount: number, paymentMethod: string, remarks: string, date: string): Promise<void>;
 
   // Notifications
   getNotifications(): Promise<Notification[]>;
@@ -84,14 +94,17 @@ export interface ApiService {
 
   // Stock Management
   getStock(locationId: 'plant' | string): Promise<EnrichedStockItem[]>;
-  addPlantProduction(items: { skuId: string; quantity: number }[], username: string): Promise<void>;
+  // FIX: Add username for auditing
+  addPlantProduction(items: { skuId: string; quantity: number }[]): Promise<void>;
   transferStockToStore(storeId: string, items: { skuId: string; quantity: number }[], username: string): Promise<void>;
 
   // Stock Transfers
-  createStockTransfer(storeId: string, items: { skuId: string; quantity: number }[], username: string): Promise<StockTransfer>;
+  // FIX: Add username for auditing
+  createStockTransfer(storeId: string, items: { skuId: string; quantity: number }[]): Promise<StockTransfer>;
   getStockTransfers(): Promise<EnrichedStockTransfer[]>;
   getEnrichedStockTransferItems(transferId: string): Promise<EnrichedStockTransferItem[]>;
-  updateStockTransferStatus(transferId: string, status: StockTransferStatus, username: string): Promise<void>;
+  // FIX: Add username for auditing
+  updateStockTransferStatus(transferId: string, status: StockTransferStatus): Promise<void>;
   getDispatchNoteData(transferId: string): Promise<DispatchNoteData | null>;
   getStockLedger(locationId: 'plant' | string): Promise<StockLedgerEntry[]>;
 }

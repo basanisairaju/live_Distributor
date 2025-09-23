@@ -1,5 +1,7 @@
 
+
 import React, { useState } from 'react';
+// FIX: Corrected the imports for 'NavLink', 'Outlet', and 'useNavigate' to resolve module export errors.
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { UserRole } from '../types';

@@ -108,7 +108,7 @@ const CreateStockDispatch: React.FC = () => {
         setIsConfirmingDelivery(true);
         setStatusMessage(null);
         try {
-            await api.updateStockTransferStatus(lastSuccessfulTransfer.id, StockTransferStatus.DELIVERED, currentUser.username);
+            await api.updateStockTransferStatus(lastSuccessfulTransfer.id, StockTransferStatus.DELIVERED);
             setLastSuccessfulTransfer(prev => {
                 if (!prev) return null;
                 return { ...prev, status: StockTransferStatus.DELIVERED, deliveredDate: new Date().toISOString() };
@@ -156,7 +156,7 @@ const CreateStockDispatch: React.FC = () => {
                 .filter(i => i.quantity > 0)
                 .map(({ skuId, quantity }) => ({ skuId, quantity: Number(quantity) }));
 
-            const newTransfer = await api.createStockTransfer(selectedStoreId, itemsToSubmit, currentUser!.username);
+            const newTransfer = await api.createStockTransfer(selectedStoreId, itemsToSubmit);
             
             setLastSuccessfulTransfer(newTransfer);
             setStatusMessage({

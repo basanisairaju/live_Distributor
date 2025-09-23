@@ -1,9 +1,17 @@
-// services/api.ts
 import { SupabaseApiService } from './supabaseApiService';
+import { MockApiService } from './mockApiService';
 import { ApiService } from './apiService.interface';
 
-// The application is now configured to use the Supabase API service exclusively.
-// Ensure your environment variables for SUPABASE_URL and SUPABASE_KEY are correctly set.
-const api: ApiService = new SupabaseApiService();
+const useSupabase = process.env.SUPABASE_URL && process.env.SUPABASE_KEY;
+
+let api: ApiService;
+
+if (useSupabase) {
+    console.log("Using Supabase API service.");
+    api = new SupabaseApiService();
+} else {
+    console.warn("Supabase credentials not found. Falling back to Mock API service. Any data changes will not be saved.");
+    api = new MockApiService();
+}
 
 export { api };

@@ -358,7 +358,7 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, onClose, onSave 
                 .filter(i => i.quantity > 0)
                 .map(({ skuId, quantity }) => ({ skuId, quantity }));
 
-            await api.updateOrderItems(order.id, itemsToSubmit, currentUser.username);
+            await api.updateOrderItems(order.id, itemsToSubmit);
             onSave();
         } catch (err) {
             let message = "An unknown error occurred.";

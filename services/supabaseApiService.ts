@@ -53,40 +53,27 @@ export class SupabaseApiService implements ApiService {
 
   // --- Auth ---
   async login(email: string, pass: string): Promise<User> {
-    // Note: Storing and comparing plaintext passwords is a major security risk.
-    // This should be replaced with a secure hashing mechanism (e.g., via an RPC call to a Supabase Edge Function).
-    const { data: profileData, error } = await this.supabase
-      .from('profiles')
-      .select('*')
-      .eq('username', email)
-      .single();
+    const { data, error } = await this.supabase.auth.signInWithPassword({
+        email: email,
+        password: pass,
+    });
+    if (error) throw error;
+    if (!data.user) throw new Error("Login failed: No user returned.");
 
-    if (error) {
-        if (error.code === 'PGRST116') { // PostgREST code for "exact one row not found"
-            throw new Error('Invalid username or password');
-        }
-        throw error;
-    }
-
-    if (!profileData) {
-      throw new Error('Invalid username or password');
-    }
+    const { data: profile, error: profileError } = await this.supabase
+        .from('profiles')
+        .select('id, username, role, store_id, permissions')
+        .eq('id', data.user.id)
+        .single();
     
-    const dbProfile = profileData as DbProfile;
-    // Direct password comparison as requested by the user
-    if (dbProfile.password !== pass) {
-        throw new Error('Invalid username or password');
-    }
+    if (profileError) throw profileError;
 
-    const { password, ...userProfile } = snakeToCamel<any>(dbProfile);
-
-    return userProfile as User;
+    return snakeToCamel<User>(profile);
   }
 
   async logout(): Promise<void> {
-    // No server-side session to clear with this custom auth method.
-    // Client-side session is cleared in useAuth.
-    return Promise.resolve();
+    const { error } = await this.supabase.auth.signOut();
+    if (error) throw error;
   }
 
   // --- Generic Helpers ---
@@ -130,6 +117,7 @@ export class SupabaseApiService implements ApiService {
   }
 
   async addUser(userData: Omit<User, 'id'>, role: UserRole): Promise<User> {
+    // This should ideally be an admin-only RPC function for security
     const { data, error } = await this.supabase
         .from('profiles')
         .insert(camelToSnake(userData))
@@ -302,10 +290,9 @@ export class SupabaseApiService implements ApiService {
   // These methods call Supabase Edge Functions (RPCs) to ensure atomicity.
   // You MUST deploy the provided SQL functions to your Supabase project for these to work.
 
-  async addPlantProduction(items: { skuId: string; quantity: number }[], username: string): Promise<void> {
+  async addPlantProduction(items: { skuId: string; quantity: number }[]): Promise<void> {
     const { error } = await this.supabase.rpc('add_plant_production', {
-      items_to_add: items,
-      p_username: username
+      items_to_add: items
     });
     if (error) {
       console.error('RPC Error (add_plant_production):', error);
@@ -313,11 +300,10 @@ export class SupabaseApiService implements ApiService {
     }
   }
 
-  async placeOrder(distributorId: string, items: { skuId: string; quantity: number }[], username: string): Promise<Order> {
+  async placeOrder(distributorId: string, items: { skuId: string; quantity: number }[]): Promise<Order> {
     const { data, error } = await this.supabase.rpc('place_order', {
       p_distributor_id: distributorId,
-      p_items: items,
-      p_username: username
+      p_items: items
     });
     if (error) {
       console.error('RPC Error (place_order):', error);
@@ -326,50 +312,50 @@ export class SupabaseApiService implements ApiService {
     return snakeToCamel<Order>(data);
   }
 
-  async updateOrderItems(orderId: string, items: { skuId: string; quantity: number }[], username: string): Promise<void> {
-    const { error } = await this.supabase.rpc('update_order_items', { p_order_id: orderId, p_items: items, p_username: username });
+  async updateOrderItems(orderId: string, items: { skuId: string; quantity: number }[]): Promise<void> {
+    const { error } = await this.supabase.rpc('update_order_items', { p_order_id: orderId, p_items: items });
     if (error) throw new Error(`Failed to update order items: ${error.message}`);
   }
 
-  async updateOrderStatus(orderId: string, status: OrderStatus, username: string): Promise<void> {
-    const { error } = await this.supabase.rpc('update_order_status', { p_order_id: orderId, p_status: status, p_username: username });
+  async updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
+    const { error } = await this.supabase.rpc('update_order_status', { p_order_id: orderId, p_status: status });
     if (error) throw new Error(`Failed to update order status: ${error.message}`);
   }
 
-  async deleteOrder(orderId: string, remarks: string, username: string): Promise<void> {
-    const { error } = await this.supabase.rpc('delete_order', { p_order_id: orderId, p_remarks: remarks, p_username: username });
+  async deleteOrder(orderId: string, remarks: string): Promise<void> {
+    const { error } = await this.supabase.rpc('delete_order', { p_order_id: orderId, p_remarks: remarks });
     if (error) throw new Error(`Failed to delete order: ${error.message}`);
   }
 
-  async initiateOrderReturn(orderId: string, itemsToReturn: { skuId: string; quantity: number }[], username: string, remarks: string): Promise<OrderReturn> {
-    const { data, error } = await this.supabase.rpc('initiate_order_return', { p_order_id: orderId, p_items: itemsToReturn, p_username: username, p_remarks: remarks });
+  async initiateOrderReturn(orderId: string, itemsToReturn: { skuId: string; quantity: number }[], remarks: string): Promise<OrderReturn> {
+    const { data, error } = await this.supabase.rpc('initiate_order_return', { p_order_id: orderId, p_items: itemsToReturn, p_remarks: remarks });
     if (error) throw new Error(`Failed to initiate return: ${error.message}`);
     return snakeToCamel<OrderReturn>(data);
   }
 
-  async confirmOrderReturn(returnId: string, username: string): Promise<void> {
-    const { error } = await this.supabase.rpc('confirm_order_return', { p_return_id: returnId, p_username: username });
+  async confirmOrderReturn(returnId: string): Promise<void> {
+    const { error } = await this.supabase.rpc('confirm_order_return', { p_return_id: returnId });
     if (error) throw new Error(`Failed to confirm return: ${error.message}`);
   }
 
-  async rechargeWallet(distributorId: string, amount: number, username: string, paymentMethod: string, remarks: string, date: string): Promise<void> {
-    const { error } = await this.supabase.rpc('recharge_wallet', { p_distributor_id: distributorId, p_amount: amount, p_username: username, p_payment_method: paymentMethod, p_remarks: remarks, p_date: date });
+  async rechargeWallet(distributorId: string, amount: number, paymentMethod: string, remarks: string, date: string): Promise<void> {
+    const { error } = await this.supabase.rpc('recharge_wallet', { p_distributor_id: distributorId, p_amount: amount, p_payment_method: paymentMethod, p_remarks: remarks, p_date: date });
     if (error) throw new Error(`Failed to recharge wallet: ${error.message}`);
   }
 
-  async rechargeStoreWallet(storeId: string, amount: number, username: string, paymentMethod: string, remarks: string, date: string): Promise<void> {
-    const { error } = await this.supabase.rpc('recharge_store_wallet', { p_store_id: storeId, p_amount: amount, p_username: username, p_payment_method: paymentMethod, p_remarks: remarks, p_date: date });
+  async rechargeStoreWallet(storeId: string, amount: number, paymentMethod: string, remarks: string, date: string): Promise<void> {
+    const { error } = await this.supabase.rpc('recharge_store_wallet', { p_store_id: storeId, p_amount: amount, p_payment_method: paymentMethod, p_remarks: remarks, p_date: date });
     if (error) throw new Error(`Failed to recharge store wallet: ${error.message}`);
   }
 
-  async createStockTransfer(storeId: string, items: { skuId: string; quantity: number }[], username: string): Promise<StockTransfer> {
-    const { data, error } = await this.supabase.rpc('create_stock_transfer', { p_store_id: storeId, p_items: items, p_username: username });
+  async createStockTransfer(storeId: string, items: { skuId: string; quantity: number }[]): Promise<StockTransfer> {
+    const { data, error } = await this.supabase.rpc('create_stock_transfer', { p_store_id: storeId, p_items: items });
     if (error) throw new Error(`Failed to create stock transfer: ${error.message}`);
     return snakeToCamel<StockTransfer>(data);
   }
 
-  async updateStockTransferStatus(transferId: string, status: StockTransferStatus, username: string): Promise<void> {
-    const { error } = await this.supabase.rpc('update_stock_transfer_status', { p_transfer_id: transferId, p_status: status, p_username: username });
+  async updateStockTransferStatus(transferId: string, status: StockTransferStatus): Promise<void> {
+    const { error } = await this.supabase.rpc('update_stock_transfer_status', { p_transfer_id: transferId, p_status: status });
     if (error) throw new Error(`Failed to update transfer status: ${error.message}`);
   }
   

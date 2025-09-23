@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo, ChangeEvent } from 'react';
 import { Distributor, SKU, Scheme, PriceTier, PriceTierItem, Store, StockTransfer, UserRole } from '../types';
 import { api } from '../services/api';
@@ -7,6 +8,7 @@ import Select from './common/Select';
 import Button from './common/Button';
 import { useAuth } from '../hooks/useAuth';
 import { PlusCircle, Trash2, CheckCircle, XCircle, Gift, Star, FileText, Send, AlertTriangle, Users, Building2, Sparkles } from 'lucide-react';
+// FIX: Corrected the imports for 'useLocation' and 'useNavigate' to resolve module export errors.
 import { useLocation, useNavigate } from 'react-router-dom';
 import { formatIndianCurrency, formatDateDDMMYYYY } from '../utils/formatting';
 import Input from './common/Input';
@@ -344,13 +346,13 @@ const PlaceOrder: React.FC = () => {
                 if (grandTotal > availableFunds) {
                     throw new Error(`Insufficient funds. Order total is ${formatIndianCurrency(grandTotal)}, but available funds are ${formatIndianCurrency(availableFunds)}.`);
                 }
-                const newOrder = await api.placeOrder(selectedDistributorId, itemsToSubmit, currentUser.username);
+                const newOrder = await api.placeOrder(selectedDistributorId, itemsToSubmit);
                 setStatusMessage({ type: 'success', text: 'Order placed successfully!', orderId: newOrder.id });
                 const updatedDistributors = await api.getDistributors(portal);
                 setDistributors(updatedDistributors);
             } else if (orderType === 'store') {
                 if (!selectedStoreId) throw new Error("No store selected");
-                const newTransfer = await api.createStockTransfer(selectedStoreId, itemsToSubmit, currentUser.username);
+                const newTransfer = await api.createStockTransfer(selectedStoreId, itemsToSubmit);
                 setLastSuccessfulTransfer(newTransfer);
                  setStatusMessage({ type: 'success', text: `Stock dispatch created successfully for ${stores.find(s => s.id === selectedStoreId)?.name}!`, transferId: newTransfer.id });
             }

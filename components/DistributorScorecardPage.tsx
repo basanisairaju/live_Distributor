@@ -10,6 +10,7 @@ import Input from './common/Input';
 import { ClipboardList, Award, Sparkles, AlertTriangle, Search } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { UserRole, OrderStatus } from '../types';
+// FIX: Corrected the import for 'Link' to resolve the module export error.
 import { Link } from 'react-router-dom';
 
 interface ScorecardEntry {

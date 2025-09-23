@@ -10,6 +10,7 @@ import { Distributor, WalletTransaction, TransactionType, EnrichedWalletTransact
 import { api } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { CheckCircle, XCircle, Copy, Check, Wallet, Users, Building2 } from 'lucide-react';
+// FIX: Corrected the import for 'useLocation' to resolve the module export error.
 import { useLocation } from 'react-router-dom';
 import { formatIndianCurrency, formatDateTimeDDMMYYYY } from '../utils/formatting';
 import DateRangePicker from './common/DateRangePicker';
@@ -145,9 +146,9 @@ const RechargeWallet: React.FC = () => {
         const rechargeDate = new Date(year, month - 1, day, 12, 0, 0);
 
         if (accountType === 'distributor') {
-            await api.rechargeWallet(data.accountId, Number(data.amount), currentUser!.username, data.paymentMethod, data.remarks, rechargeDate.toISOString());
+            await api.rechargeWallet(data.accountId, Number(data.amount), data.paymentMethod, data.remarks, rechargeDate.toISOString());
         } else {
-            await api.rechargeStoreWallet(data.accountId, Number(data.amount), currentUser!.username, data.paymentMethod, data.remarks, rechargeDate.toISOString());
+            await api.rechargeStoreWallet(data.accountId, Number(data.amount), data.paymentMethod, data.remarks, rechargeDate.toISOString());
         }
         
         setStatusMessage({ type: 'success', text: `${formatIndianCurrency(data.amount)} successfully added to ${accountName}'s account.` });

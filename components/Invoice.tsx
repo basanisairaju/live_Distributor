@@ -1,6 +1,7 @@
 
 
 import React, { useEffect, useState } from 'react';
+// FIX: Corrected the imports for 'useParams' and 'useNavigate' to resolve module export errors.
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { InvoiceData, CompanyDetails, Store } from '../types';

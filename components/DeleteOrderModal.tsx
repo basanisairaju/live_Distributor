@@ -26,7 +26,7 @@ const DeleteOrderModal: React.FC<DeleteOrderModalProps> = ({ order, onClose, onC
         setLoading(true);
         setError(null);
         try {
-            await api.deleteOrder(order.id, remarks, currentUser.username);
+            await api.deleteOrder(order.id, remarks);
             onConfirm();
             onClose();
         } catch (err) {
