@@ -321,8 +321,8 @@ const ManagePriceTiers: React.FC = () => {
                                     <tr>
                                         <SortableTableHeader label="Distributor" sortKey="name" requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="whitespace-nowrap" />
                                         {skus.map(sku => (
-                                            // FIX: Cast dynamic SKU ID to 'keyof PricingTableRow' to satisfy the generic constraint of the component.
-                                            <SortableTableHeader<PricingTableRow> key={sku.id} label={sku.name} sortKey={sku.id as keyof PricingTableRow} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
+                                            // FIX: Removed unnecessary cast on dynamic SKU ID to resolve a TypeScript type error with the 'key' prop.
+                                            <SortableTableHeader<PricingTableRow> key={sku.id} label={sku.name} sortKey={sku.id} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
                                         ))}
                                     </tr>
                                 </thead>

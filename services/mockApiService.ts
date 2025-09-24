@@ -111,7 +111,7 @@ export class MockApiService implements ApiService {
   async login(email: string, pass: string): Promise<User> {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
-        const user = this.users.find(u => u.username.toLowerCase() === email.toLowerCase() && u.password === pass);
+        const user = this.users.find(u => u.username.toLowerCase() === email.trim().toLowerCase() && u.password === pass);
         if (user) {
           const { password, ...userWithoutPassword } = user;
           resolve(userWithoutPassword);

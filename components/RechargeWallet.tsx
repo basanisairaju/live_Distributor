@@ -169,8 +169,8 @@ const RechargeWallet: React.FC = () => {
         if (error instanceof Error) {
             message = error.message;
         } else if (error && typeof error === 'object' && 'message' in error) {
-            // FIX: Cast error message property to 'any' to satisfy String constructor type requirements, resolving the 'unknown' is not assignable error.
-            message = String((error as { message: any }).message);
+            // FIX: Cast error to 'any' to access the message property safely, resolving the 'unknown' is not assignable error.
+            message = String((error as any).message);
         }
         setStatusMessage({ type: 'error', text: `Failed to recharge wallet: ${message}` });
       } finally {

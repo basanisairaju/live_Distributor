@@ -54,7 +54,7 @@ export class SupabaseApiService implements ApiService {
   // --- Auth ---
   async login(email: string, pass: string): Promise<User> {
     const { data, error } = await this.supabase.auth.signInWithPassword({
-        email: email,
+        email: email.trim(),
         password: pass,
     });
     if (error) throw error;
