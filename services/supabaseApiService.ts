@@ -53,27 +53,32 @@ export class SupabaseApiService implements ApiService {
 
   // --- Auth ---
   async login(email: string, pass: string): Promise<User> {
-    const { data, error } = await this.supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: pass,
-    });
-    if (error) throw error;
-    if (!data.user) throw new Error("Login failed: No user returned.");
+    // Trim whitespace from email to prevent login issues
+    const trimmedEmail = email.trim();
 
-    const { data: profile, error: profileError } = await this.supabase
+    // Query the profiles table directly for a user with matching username and password
+    const { data: profile, error } = await this.supabase
         .from('profiles')
         .select('id, username, role, store_id, permissions')
-        .eq('id', data.user.id)
+        .eq('username', trimmedEmail)
+        .eq('password', pass)
         .single();
-    
-    if (profileError) throw profileError;
 
+    // If there's an error or no profile is found, reject the login attempt
+    if (error || !profile) {
+        // Log the actual error for debugging but return a generic message to the user
+        console.error('Login error:', error);
+        throw new Error('Invalid login credentials.');
+    }
+
+    // If a profile is found, return it as a User object
     return snakeToCamel<User>(profile);
   }
 
   async logout(): Promise<void> {
-    const { error } = await this.supabase.auth.signOut();
-    if (error) throw error;
+    // Since we are not using Supabase Auth, logout is just a client-side state removal.
+    // The server doesn't need to be notified.
+    return Promise.resolve();
   }
 
   // --- Generic Helpers ---

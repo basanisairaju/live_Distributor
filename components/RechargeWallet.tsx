@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import Card from './common/Card';
@@ -170,8 +166,8 @@ const RechargeWallet: React.FC = () => {
         if (error instanceof Error) {
             message = error.message;
         } else if (error && typeof error === 'object' && 'message' in error) {
-            // FIX: Cast error to 'any' to access the message property safely, resolving the 'unknown' is not assignable error.
-            message = String((error as any).message);
+            // FIX: Correctly cast the error object to access its 'message' property, resolving a TypeScript error.
+            message = String((error as { message: unknown }).message);
         }
         setStatusMessage({ type: 'error', text: `Failed to recharge wallet: ${message}` });
       } finally {

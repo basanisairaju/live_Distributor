@@ -154,8 +154,8 @@ const SpecialAssignmentsPage = () => {
                                 <tr>
                                     <SortableTableHeader label="Distributor" sortKey="name" requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="whitespace-nowrap" />
                                     {skus.map(sku => (
-                                        // FIX: Removed explicit generic <PricingTableRow> to fix an issue where the 'key' prop was being type-checked against the component's props.
-                                        <SortableTableHeader key={sku.id} label={sku.name} sortKey={sku.id} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
+                                        // FIX: Explicitly provided generic type to resolve inference issue.
+                                        <SortableTableHeader<PricingTableRow> key={sku.id} label={sku.name} sortKey={sku.id} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
                                     ))}
                                 </tr>
                             </thead>
