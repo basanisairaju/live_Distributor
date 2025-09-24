@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import Card from './components/common/Card';
@@ -80,10 +80,7 @@ const LoginPage: React.FC = () => {
         </Card>
         <div className="text-center mt-4 text-sm">
             <p className="text-contentSecondary">
-                Can't log in?{' '}
-                <Link to="/connect-supabase" className="font-medium text-primary hover:underline">
-                    Configure Backend
-                </Link>
+                Contact support if you have trouble logging in.
             </p>
         </div>
       </div>

@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { api } from '../services/api';
@@ -321,8 +322,8 @@ const ManagePriceTiers: React.FC = () => {
                                     <tr>
                                         <SortableTableHeader label="Distributor" sortKey="name" requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="whitespace-nowrap" />
                                         {skus.map(sku => (
-                                            // FIX: Removed unnecessary cast on dynamic SKU ID to resolve a TypeScript type error with the 'key' prop.
-                                            <SortableTableHeader<PricingTableRow> key={sku.id} label={sku.name} sortKey={sku.id} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
+                                            // FIX: Removed explicit generic <PricingTableRow> to fix an issue where the 'key' prop was being type-checked against the component's props.
+                                            <SortableTableHeader key={sku.id} label={sku.name} sortKey={sku.id} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
                                         ))}
                                     </tr>
                                 </thead>
