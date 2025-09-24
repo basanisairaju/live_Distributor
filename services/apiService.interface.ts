@@ -7,6 +7,7 @@ export interface ApiService {
   // Auth
   login(email: string, pass: string): Promise<User>;
   logout(): Promise<void>;
+  seedAdminUser(): Promise<void>;
 
   // Users
   getUsers(portalState: PortalState | null): Promise<User[]>;

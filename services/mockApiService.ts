@@ -9,9 +9,10 @@ import {
 import { ApiService } from './apiService.interface';
 import {
   users, distributors, orders, orderItems, skus, schemes, walletTransactions, notifications,
-  priceTiers, priceTierItems, stores, orderReturns, stockItems as seedStockItems, stockLedger as seedStockLedger,
-  stockTransfers as seedStockTransfers, stockTransferItems as seedStockTransferItems
+  priceTiers, priceTierItems, stores, orderReturns, stockItems, stockLedger,
+  stockTransfers, stockTransferItems
 } from './seedData';
+import { menuItems } from '../constants';
 
 // Helper for deep cloning to prevent mutations of original seed data
 const deepClone = <T>(obj: T): T => JSON.parse(JSON.stringify(obj));
@@ -20,7 +21,7 @@ let nextIdCounters: Record<string, number> = {};
 const getNextId = (prefix: string) => {
     if (!nextIdCounters[prefix]) {
         // Initialize from seed data to avoid collisions
-        const allData = [...users, ...distributors, ...orders, ...orderItems, ...skus, ...schemes, ...walletTransactions, ...notifications, ...priceTiers, ...stores, ...orderReturns, ...seedStockLedger, ...seedStockTransfers, ...seedStockTransferItems];
+        const allData = [...users, ...distributors, ...orders, ...orderItems, ...skus, ...schemes, ...walletTransactions, ...notifications, ...priceTiers, ...stores, ...orderReturns, ...stockLedger, ...stockTransfers, ...stockTransferItems];
         const maxId = allData
             .filter(item => item.id.startsWith(prefix))
             .map(item => parseInt(item.id.replace(prefix, ''), 10))
@@ -62,10 +63,10 @@ export class MockApiService implements ApiService {
     this.priceTiers = deepClone(priceTiers);
     this.priceTierItems = deepClone(priceTierItems);
     this.orderReturns = deepClone(orderReturns);
-    this.stockItems = deepClone(seedStockItems);
-    this.stockLedger = deepClone(seedStockLedger);
-    this.stockTransfers = deepClone(seedStockTransfers);
-    this.stockTransferItems = deepClone(seedStockTransferItems);
+    this.stockItems = deepClone(stockItems);
+    this.stockLedger = deepClone(stockLedger);
+    this.stockTransfers = deepClone(stockTransfers);
+    this.stockTransferItems = deepClone(stockTransferItems);
 
     // FIX: Initialize reserved stock based on initial pending orders and transfers
     this.initializeReservedStock();
@@ -122,6 +123,22 @@ export class MockApiService implements ApiService {
     });
   }
   async logout(): Promise<void> {
+    return Promise.resolve();
+  }
+  async seedAdminUser(): Promise<void> {
+    // In the mock service, the admin user is already part of the seedData.
+    // This function ensures the user exists if they were somehow removed.
+    const admin = this.users.find(u => u.username === 'admin');
+    if (!admin) {
+        this.users.push({
+            id: 'user009',
+            username: 'admin',
+            password: 'password',
+            role: UserRole.PLANT_ADMIN,
+            permissions: menuItems.map(item => item.path),
+        });
+        console.log('Mock admin user seeded.');
+    }
     return Promise.resolve();
   }
 

@@ -7,6 +7,7 @@ import {
   StockLedgerEntry, StockTransfer, StockTransferStatus, StockTransferItem,
   EnrichedStockTransfer, EnrichedStockTransferItem, DispatchNoteData, PortalState, TransactionType, StockMovementType,
 } from '../types';
+import { menuItems } from '../constants';
 
 // --- Type Aliases for Supabase Schema (snake_case) ---
 type DbProfile = {
@@ -79,6 +80,57 @@ export class SupabaseApiService implements ApiService {
     // Since we are not using Supabase Auth, logout is just a client-side state removal.
     // The server doesn't need to be notified.
     return Promise.resolve();
+  }
+  
+  async seedAdminUser(): Promise<void> {
+    const allPermissions = menuItems.map(item => item.path);
+
+    const { data, error } = await this.supabase
+      .from('profiles')
+      .select('id, permissions')
+      .eq('username', 'admin')
+      .single();
+
+    if (error && error.code === 'PGRST116') { // 'PGRST116' is "Query returned 0 rows" -> User does not exist.
+      console.log('Admin user not found, seeding...');
+      const { error: insertError } = await this.supabase
+        .from('profiles')
+        .insert({
+          username: 'admin',
+          password: 'password', // WARNING: Storing plain text passwords is a security risk.
+          role: 'Plant Admin',
+          permissions: allPermissions,
+          store_id: null,
+        });
+      
+      if (insertError) {
+        console.error('Error seeding admin user:', insertError);
+        throw new Error('Could not seed admin user.');
+      }
+      console.log('Admin user seeded successfully.');
+    } else if (error) {
+      console.error('Error checking for admin user:', error);
+    } else if (data) { // User exists, check if permissions need an update.
+      const existingPermissions = new Set(data.permissions || []);
+      const requiredPermissions = new Set(allPermissions);
+      
+      // Check if permissions are different
+      if (existingPermissions.size !== requiredPermissions.size || !allPermissions.every(p => existingPermissions.has(p))) {
+        console.log('Admin user permissions are outdated, updating...');
+        const { error: updateError } = await this.supabase
+          .from('profiles')
+          .update({ permissions: allPermissions })
+          .eq('id', data.id);
+        
+        if (updateError) {
+          console.error('Error updating admin user permissions:', updateError);
+        } else {
+          console.log('Admin user permissions updated.');
+        }
+      } else {
+          // console.log('Admin user already exists with correct permissions.');
+      }
+    }
   }
 
   // --- Generic Helpers ---
