@@ -161,13 +161,13 @@ const RechargeWallet: React.FC = () => {
         setAllTransactions(allTxs);
 
         reset({ accountId: '', amount: undefined, paymentMethod: 'Cash', remarks: '', date: new Date().toISOString().split('T')[0] });
+// FIX: Changed error handling to safely access the message property from an unknown error object.
       } catch (error) {
         let message = "An unknown error occurred.";
         if (error instanceof Error) {
             message = error.message;
         } else if (error && typeof error === 'object' && 'message' in error) {
-            // FIX: Correctly cast the error object to access its 'message' property, which is of type 'unknown', and convert it to a string. This resolves a TypeScript error.
-            message = String((error as { message: unknown }).message);
+            message = String((error as any).message);
         }
         setStatusMessage({ type: 'error', text: `Failed to recharge wallet: ${message}` });
       } finally {

@@ -54,405 +54,327 @@ export class SupabaseApiService implements ApiService {
 
   // --- Auth ---
   async login(email: string, pass: string): Promise<User> {
-    const trimmedEmail = email.trim();
-
+    const normalizedUsername = email.trim();
+    console.log(`[Login Attempt] Querying for username (case-insensitive): '${normalizedUsername}'`);
+    
     const { data: profile, error } = await this.supabase
         .from('profiles')
         .select('id, username, role, store_id, permissions')
-        .eq('username', trimmedEmail)
+        .ilike('username', normalizedUsername)
         .eq('password', pass)
         .single();
 
     if (error) {
-        // 'PGRST116' means "Query returned 0 rows"
-        if (error.code === 'PGRST116') {
-             throw new Error('Invalid username or password.');
+        console.error('[Supabase Login Error]', { message: error.message, details: error.details, code: error.code });
+        if (error.code === 'PGRST116') { // "The result contains 0 rows"
+            console.log("[Login Diagnostics] The query returned 0 rows. This means either the user does not exist in the database, or the password does not match. Please check the [Seed] logs on your Vercel deployment to see if the 'admin' user was created correctly.");
+            throw new Error("Invalid username or password.");
         }
-        // For other errors, provide the specific Supabase message
-        console.error('Supabase login error:', error);
         throw new Error(`Database error: ${error.message}`);
     }
 
     if (!profile) {
-        throw new Error('Invalid username or password.');
+        // This case should be covered by the error code above, but as a fallback.
+        console.log("[Login Diagnostics] Query succeeded but returned no profile. This is unexpected but points to a credential mismatch.");
+        throw new Error("Invalid username or password.");
     }
 
+    console.log(`[Login] Successfully authenticated user: '${profile.username}'`);
     return snakeToCamel<User>(profile);
   }
-
   async logout(): Promise<void> {
-    // Since we are not using Supabase Auth, logout is just a client-side state removal.
-    // The server doesn't need to be notified.
+    // In a real app, this would call supabase.auth.signOut()
     return Promise.resolve();
   }
-  
   async seedAdminUser(): Promise<void> {
-    console.log('[seedAdminUser] Starting admin user check...');
-    const allPermissions = menuItems.map(item => item.path);
+    console.log("[Seed] -----------------------------------------");
+    console.log("[Seed] Starting admin user seed process...");
+    const adminUsername = 'admin';
+    const adminPassword = 'password';
+    console.log(`[Seed] Target credentials -> username: '${adminUsername}', password: '${adminPassword}'`);
 
-    const { data, error } = await this.supabase
-      .from('profiles')
-      .select('id, permissions')
-      .eq('username', 'admin')
-      .single();
+    try {
+        console.log(`[Seed] Step 1: Checking for existing user '${adminUsername}'...`);
+        const { data: existingUser, error: fetchError } = await this.supabase
+            .from('profiles')
+            .select('*')
+            .eq('username', adminUsername)
+            .maybeSingle();
 
-    if (error && error.code === 'PGRST116') { // 'PGRST116' is "Query returned 0 rows" -> User does not exist.
-      console.log('[seedAdminUser] Admin user not found, attempting to create...');
-      const { error: insertError } = await this.supabase
-        .from('profiles')
-        .insert({
-          username: 'admin',
-          password: 'password', // WARNING: Storing plain text passwords is a security risk.
-          role: 'Plant Admin',
-          permissions: allPermissions,
-          store_id: null,
-        });
-      
-      if (insertError) {
-        console.error('[seedAdminUser] Error seeding admin user:', insertError);
-        throw new Error('Could not seed admin user.');
-      }
-      console.log('[seedAdminUser] Admin user seeded successfully.');
-    } else if (error) {
-      console.error('[seedAdminUser] Error checking for admin user:', error);
-    } else if (data) { // User exists, check if permissions need an update.
-      console.log('[seedAdminUser] Admin user found. Verifying permissions...');
-      const existingPermissions = new Set(data.permissions || []);
-      const requiredPermissions = new Set(allPermissions);
-      
-      if (existingPermissions.size !== requiredPermissions.size || !allPermissions.every(p => existingPermissions.has(p))) {
-        console.log('[seedAdminUser] Admin permissions are outdated, updating...');
-        const { error: updateError } = await this.supabase
-          .from('profiles')
-          .update({ permissions: allPermissions })
-          .eq('id', data.id);
-        
-        if (updateError) {
-          console.error('[seedAdminUser] Error updating admin permissions:', updateError);
-        } else {
-          console.log('[seedAdminUser] Admin user permissions updated successfully.');
+        if (fetchError) {
+            console.error('[Seed] FATAL: Error fetching admin user.', { message: fetchError.message, details: fetchError.details });
+            throw new Error(`Database error during seeding: ${fetchError.message}`);
         }
-      } else {
-          console.log('[seedAdminUser] Admin user permissions are up-to-date.');
-      }
+
+        if (existingUser) {
+            console.log(`[Seed] Step 2: User '${adminUsername}' found. Checking if password needs update...`);
+            if (existingUser.password !== adminPassword) {
+                console.log("[Seed] Step 3: Password mismatch found. Updating password...");
+                const { error: updateError } = await this.supabase
+                    .from('profiles')
+                    .update({ password: adminPassword })
+                    .eq('id', existingUser.id);
+
+                if (updateError) {
+                    console.error('[Seed] FATAL: Error updating admin password.', { message: updateError.message, details: updateError.details });
+                    throw new Error(`Failed to update admin password: ${updateError.message}`);
+                }
+                console.log("[Seed] Step 3 SUCCESS: Admin password updated.");
+            } else {
+                console.log("[Seed] Step 3: Password matches. No update needed.");
+            }
+        } else {
+            console.log(`[Seed] Step 2: User '${adminUsername}' not found. Creating new user...`);
+            const { error: createError } = await this.supabase
+                .from('profiles')
+                .insert({
+                    username: adminUsername,
+                    password: adminPassword,
+                    role: UserRole.PLANT_ADMIN,
+                    permissions: menuItems.map(item => item.path),
+                });
+            
+            if (createError) {
+                console.error('[Seed] FATAL: Error creating admin user.', { message: createError.message, details: createError.details });
+                throw new Error(`Failed to create admin user: ${createError.message}`);
+            }
+            console.log("[Seed] Step 2 SUCCESS: New admin user created.");
+        }
+        console.log("[Seed] Admin user seed process completed successfully.");
+        console.log("[Seed] -----------------------------------------");
+    } catch (e: any) {
+        console.error("[Seed] An unexpected error occurred during the seed process.", e);
+        console.log("[Seed] -----------------------------------------");
     }
   }
 
   async checkBackendStatus(): Promise<BackendStatus> {
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
-        return { status: 'error', message: 'Backend not configured: Missing Supabase credentials.' };
-    }
-    
     try {
-        const { error } = await this.supabase.from('stores').select('id', { count: 'exact', head: true });
+        // Attempt a simple, quick query to check credentials and connectivity.
+        const { error } = await this.supabase.from('profiles').select('id').limit(1);
 
         if (error) {
-            if (error.message.includes('Invalid API key') || error.message.includes('invalid JWT')) {
-                return { status: 'error', message: 'Connection Failed: Invalid Supabase API Key.' };
+            console.error('[Backend Check Error]', { message: error.message, details: error.details });
+            // Provide more specific guidance based on common errors
+            if (error.message.includes('JWT') || error.message.includes('Key')) {
+                 return { status: 'error', message: `Authentication error: Invalid API Key. Please ensure your SUPABASE_KEY is correct.` };
             }
-            if (error.message.includes('fetch failed')) {
-                return { status: 'error', message: 'Connection Failed: Cannot reach backend. Check Supabase URL and network.' };
+            if (error.message.includes('fetch')) {
+                return { status: 'error', message: `Network error: Could not reach the database. Please check your SUPABASE_URL.` };
             }
-            return { status: 'error', message: `Connection Failed: ${error.message}` };
+            return { status: 'error', message: `Connection failed: ${error.message}. Check your Supabase URL, Key, and network access rules.` };
         }
 
-        return { status: 'ok', message: 'Backend connected' };
+        return { status: 'ok', message: 'Backend Connected' };
     } catch (e: any) {
-        return { status: 'error', message: `Network Error: ${e.message || 'Cannot reach server.'}` };
+        console.error('[Backend Check Exception]', e);
+        return { status: 'error', message: `An unexpected error occurred: ${e.message}` };
     }
   }
 
-
-  // --- Generic Helpers ---
-  private async _getAll<T>(tableName: string): Promise<T[]> {
-      const { data, error } = await this.supabase.from(tableName).select('*');
-      if (error) throw error;
-      return snakeToCamel<T[]>(data || []);
-  }
-  private async _getById<T>(tableName: string, id: string): Promise<T | null> {
-      const { data, error } = await this.supabase.from(tableName).select('*').eq('id', id).single();
-      if (error && error.code !== 'PGRST116') throw error;
-      return data ? snakeToCamel<T>(data) : null;
-  }
-  private async _add<T>(tableName: string, payload: Omit<T, 'id'>): Promise<T> {
-      const { data, error } = await this.supabase.from(tableName).insert(camelToSnake(payload)).select().single();
-      if (error) throw error;
-      return snakeToCamel<T>(data);
-  }
-  private async _update<T extends {id: any}>(tableName: string, payload: T): Promise<T> {
-      const { id, ...updateData } = payload;
-      const { data, error } = await this.supabase.from(tableName).update(camelToSnake(updateData)).eq('id', id).select().single();
-      if (error) throw error;
-      return snakeToCamel<T>(data);
-  }
-  private async _delete(tableName: string, id: string): Promise<void> {
-      const { error } = await this.supabase.from(tableName).delete().eq('id', id);
-      if (error) throw error;
-  }
-  
-   // --- Users, Stores, SKUs, Price Tiers ---
+  // --- Users ---
   async getUsers(portalState: PortalState | null): Promise<User[]> {
-    let query = this.supabase.from('profiles').select('id, username, role, store_id, permissions');
-
-    if (portalState?.type === 'store') {
-        query = query.eq('store_id', portalState.id);
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-    return snakeToCamel<User[]>(data || []);
+    // This method will be implemented later to fetch real data.
+    return Promise.resolve([]);
   }
-
   async addUser(userData: Omit<User, 'id'>, role: UserRole): Promise<User> {
-    // This should ideally be an admin-only RPC function for security
-    const { data, error } = await this.supabase
-        .from('profiles')
-        .insert(camelToSnake(userData))
-        .select()
-        .single();
-    if (error) throw error;
-    
-    const { password, ...newUser } = snakeToCamel<any>(data);
-    return newUser as User;
+    throw new Error('Method not implemented.');
   }
-
   async updateUser(userData: User, role: UserRole): Promise<User> {
-    const { id, ...updateData } = userData;
-    
-    if (updateData.password === '' || updateData.password === undefined || updateData.password === null) {
-        delete updateData.password;
-    }
-
-    const { data, error } = await this.supabase
-        .from('profiles')
-        .update(camelToSnake(updateData))
-        .eq('id', id)
-        .select()
-        .single();
-
-    if (error) throw error;
-    const { password, ...updatedUser } = snakeToCamel<any>(data);
-    return updatedUser as User;
+    throw new Error('Method not implemented.');
   }
-
   async deleteUser(userId: string, currentUserId: string, role: UserRole): Promise<void> {
-    if (userId === currentUserId) throw new Error("You cannot delete your own account.");
-    return this._delete('profiles', userId);
+    throw new Error('Method not implemented.');
   }
   
-  async getStores(): Promise<Store[]> { return this._getAll<Store>('stores'); }
-  async getStoreById(id: string): Promise<Store | null> { return this._getById<Store>('stores', id); }
-  async addStore(storeData: Omit<Store, 'id' | 'walletBalance'>): Promise<Store> { return this._add<Store>('stores', { ...storeData, walletBalance: 0 }); }
-  async updateStore(storeData: Store): Promise<Store> { return this._update<Store>('stores', storeData); }
-  async deleteStore(storeId: string): Promise<void> { return this._delete('stores', storeId); }
-  async getSKUs(): Promise<SKU[]> { return this._getAll<SKU>('skus'); }
-  async addSKU(skuData: Omit<SKU, 'id'>, role: UserRole): Promise<SKU> { return this._add<SKU>('skus', skuData); }
-  async updateSKU(skuData: SKU, role: UserRole): Promise<SKU> { return this._update<SKU>('skus', skuData); }
-  async getPriceTiers(): Promise<PriceTier[]> { return this._getAll<PriceTier>('price_tiers'); }
-  async addPriceTier(tierData: Omit<PriceTier, 'id'>, role: UserRole): Promise<PriceTier> { return this._add<PriceTier>('price_tiers', tierData); }
-  async updatePriceTier(tierData: PriceTier, role: UserRole): Promise<PriceTier> { return this._update<PriceTier>('price_tiers', tierData); }
-  async deletePriceTier(tierId: string, role: UserRole): Promise<void> { return this._delete('price_tiers', tierId); }
-  async getAllPriceTierItems(): Promise<PriceTierItem[]> { return this._getAll<PriceTierItem>('price_tier_items'); }
-  async setPriceTierItems(tierId: string, items: PriceTierItem[], role: UserRole): Promise<void> {
-    const { error: deleteError } = await this.supabase.from('price_tier_items').delete().eq('tier_id', tierId);
-    if (deleteError) throw deleteError;
-    if (items.length > 0) {
-        const payload = items.map(item => camelToSnake({ tierId, ...item }));
-        const { error: insertError } = await this.supabase.from('price_tier_items').insert(payload);
-        if (insertError) throw insertError;
-    }
+  // --- Stores ---
+  async getStores(): Promise<Store[]> {
+    throw new Error('Method not implemented.');
+  }
+  async getStoreById(id: string): Promise<Store | null> {
+    throw new Error('Method not implemented.');
+  }
+  async addStore(storeData: Omit<Store, 'id' | 'walletBalance'>): Promise<Store> {
+    throw new Error('Method not implemented.');
+  }
+  async updateStore(storeData: Store): Promise<Store> {
+    throw new Error('Method not implemented.');
+  }
+  async deleteStore(storeId: string): Promise<void> {
+    throw new Error('Method not implemented.');
   }
 
   // --- Distributors ---
   async getDistributors(portalState: PortalState | null): Promise<Distributor[]> {
-    let query = this.supabase.from('distributors').select('*');
-    if (portalState?.type === 'store') query = query.eq('store_id', portalState.id);
-    const { data, error } = await query;
-    if (error) throw error;
-    return snakeToCamel<Distributor[]>(data || []);
+    throw new Error('Method not implemented.');
   }
-  async getDistributorById(id: string): Promise<Distributor | null> { return this._getById<Distributor>('distributors', id); }
-  async addDistributor(distributorData: Omit<Distributor, 'id'|'walletBalance'|'dateAdded'>, portalState: PortalState | null): Promise<Distributor> {
-    const payload = {...distributorData, storeId: portalState?.type === 'store' ? portalState.id : (distributorData.storeId || null), walletBalance: 0, dateAdded: new Date().toISOString()};
-    return this._add<Distributor>('distributors', payload);
+  async getDistributorById(id: string): Promise<Distributor | null> {
+    throw new Error('Method not implemented.');
   }
-  async updateDistributor(distributorData: Distributor): Promise<Distributor> { return this._update<Distributor>('distributors', distributorData); }
-  
-  // --- Simplified Reads ---
-  async getOrders(portalState: PortalState | null): Promise<Order[]> { const dists = await this.getDistributors(portalState); if (dists.length === 0) return []; const { data, error } = await this.supabase.from('orders').select('*').in('distributor_id', dists.map(d=>d.id)); if (error) throw error; return snakeToCamel<Order[]>(data || []); }
-  async getOrdersByDistributor(distributorId: string): Promise<Order[]> { const { data, error } = await this.supabase.from('orders').select('*').eq('distributor_id', distributorId); if (error) throw error; return snakeToCamel<Order[]>(data || []); }
-  async getAllOrderItems(portalState: PortalState | null): Promise<OrderItem[]> { const orders = await this.getOrders(portalState); if(orders.length === 0) return []; const { data, error } = await this.supabase.from('order_items').select('*').in('order_id', orders.map(o=>o.id)); if (error) throw error; return snakeToCamel<OrderItem[]>(data || []); }
-  async getSchemes(portalState: PortalState | null): Promise<Scheme[]> { const { data, error } = await this.supabase.from('schemes').select('*'); if (error) throw error; return snakeToCamel<Scheme[]>(data || []); }
-  async getGlobalSchemes(): Promise<Scheme[]> { const { data, error } = await this.supabase.from('schemes').select('*').eq('is_global', true); if (error) throw error; return snakeToCamel<Scheme[]>(data || []); }
-  async getSchemesByDistributor(distributorId: string): Promise<Scheme[]> { const { data, error } = await this.supabase.from('schemes').select('*').eq('distributor_id', distributorId); if (error) throw error; return snakeToCamel<Scheme[]>(data || []); }
-  async getSchemesByStore(storeId: string): Promise<Scheme[]> { const { data, error } = await this.supabase.from('schemes').select('*').eq('store_id', storeId); if (error) throw error; return snakeToCamel<Scheme[]>(data || []); }
-  async addScheme(schemeData: Omit<Scheme, 'id'>, role: UserRole): Promise<Scheme> { if (role !== UserRole.PLANT_ADMIN) throw new Error("Permission denied."); return this._add<Scheme>('schemes', schemeData); }
-  async updateScheme(schemeData: Scheme, role: UserRole): Promise<Scheme> { if (role !== UserRole.PLANT_ADMIN) throw new Error("Permission denied."); return this._update<Scheme>('schemes', schemeData); }
-  async deleteScheme(schemeId: string, role: UserRole): Promise<void> { if (role !== UserRole.PLANT_ADMIN) throw new Error("Permission denied."); return this._delete('schemes', schemeId); }
-  async stopScheme(schemeId: string, username: string, role: UserRole): Promise<void> { if (role !== UserRole.PLANT_ADMIN) throw new Error("Permission denied."); const today = new Date().toISOString(); const { error } = await this.supabase.from('schemes').update({ end_date: today, stopped_by: username, stopped_date: today, }).eq('id', schemeId); if (error) throw error; }
-  async getNotifications(): Promise<Notification[]> { const { data, error } = await this.supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(20); if(error) throw error; return snakeToCamel<Notification[]>(data || []); }
-  async markNotificationAsRead(id: string): Promise<void> { const { error } = await this.supabase.from('notifications').update({ is_read: true }).eq('id', id); if (error) throw error; }
-  async markAllNotificationsAsRead(): Promise<void> { const { data: unread } = await this.supabase.from('notifications').select('id').eq('is_read', false); if (unread && unread.length > 0) { const { error } = await this.supabase.from('notifications').update({ is_read: true }).in('id', unread.map(u => u.id)); if (error) throw error; } }
-  async getStockLedger(locationId: 'plant' | string): Promise<StockLedgerEntry[]> { const { data, error } = await this.supabase.from('stock_ledger_entries').select('*').eq('location_id', locationId); if (error) throw error; return snakeToCamel<StockLedgerEntry[]>(data || []); }
-  
-  // --- Complex Reads (Joins) ---
-  async getOrderItems(orderId: string): Promise<EnrichedOrderItem[]> {
-    const { data, error } = await this.supabase.from('order_items').select('*, skus(name, hsn_code, gst_percentage)').eq('order_id', orderId);
-    if (error) throw error;
-    const enriched = (data || []).map((item: any) => {
-        const { skus, ...rest } = snakeToCamel<any>(item);
-        return {
-            ...rest,
-            skuName: skus?.name || '?',
-            hsnCode: skus?.hsnCode || '?',
-            gstPercentage: skus?.gstPercentage || 0
-        };
-    });
-    return enriched;
+  async addDistributor(
+    distributorData: Omit<Distributor, 'id' | 'walletBalance' | 'dateAdded'>, 
+    portalState: PortalState | null,
+    initialScheme?: Omit<Scheme, 'id' | 'isGlobal' | 'distributorId' | 'storeId' | 'stoppedBy' | 'stoppedDate'>
+  ): Promise<Distributor> {
+    throw new Error('Method not implemented.');
   }
-  async getReturns(status: ReturnStatus, portalState: PortalState | null): Promise<EnrichedOrderReturn[]> {
-     const distributors = await this.getDistributors(portalState);
-     const distributorIds = distributors.map(d => d.id);
-     if (distributorIds.length === 0) return [];
-     const { data, error } = await this.supabase.from('order_returns').select('*, order_return_items(*, skus(name)), distributors(name)').eq('status', status).in('distributor_id', distributorIds);
-     if (error) throw error;
-     const enriched = (data || []).map((ret: any) => {
-        const { distributors, orderReturnItems, ...rest } = snakeToCamel<any>(ret);
-        return {
-            ...rest,
-            distributorName: distributors?.name,
-            skuDetails: orderReturnItems?.map((item: any) => ({ 
-                skuId: item.skuId, 
-                skuName: item.skus.name, 
-                quantity: item.quantity, 
-                unitPrice: 0 /* Not easily available */ 
-            })) || []
-        };
-     });
-     return enriched;
+  async updateDistributor(distributorData: Distributor, role: UserRole): Promise<Distributor> {
+      throw new Error('Method not implemented.');
   }
-  async getStock(locationId: 'plant' | string): Promise<EnrichedStockItem[]> {
-      const { data, error } = await this.supabase.from('stock_items').select('*, skus(name)').eq('location_id', locationId);
-      if (error) throw error;
-      const enriched = (data || []).map((item: any) => {
-        const { skus, ...rest } = snakeToCamel<any>(item);
-        return {
-            ...rest,
-            skuName: skus?.name,
-        };
-      });
-      return enriched;
-  }
-  async getAllWalletTransactions(portalState: PortalState | null): Promise<EnrichedWalletTransaction[]> {
-      const dists = await this.getDistributors(portalState);
-      const stores = await this.getStores();
-      const distMap = new Map(dists.map(d => [d.id, d.name]));
-      const storeMap = new Map(stores.map(s => [s.id, s.name]));
-      
-      const { data, error } = await this.supabase.from('wallet_transactions').select('*');
-      if (error) throw error;
-      const transactions = snakeToCamel<WalletTransaction[]>(data || []);
 
-      return transactions
-        .filter(tx => (tx.distributorId && distMap.has(tx.distributorId)) || (tx.storeId && storeMap.has(tx.storeId)))
-        .map(tx => ({
-            ...tx,
-            accountName: tx.distributorId ? distMap.get(tx.distributorId)! : storeMap.get(tx.storeId!)!,
-            accountType: tx.distributorId ? 'Distributor' : 'Store'
-        }));
+
+  // --- Orders & Items ---
+  async getOrders(portalState: PortalState | null): Promise<Order[]> {
+    throw new Error('Method not implemented.');
+  }
+  async getOrdersByDistributor(distributorId: string): Promise<Order[]> {
+    throw new Error('Method not implemented.');
+  }
+  async getAllOrderItems(portalState: PortalState | null): Promise<OrderItem[]> {
+      throw new Error('Method not implemented.');
+  }
+  async getOrderItems(orderId: string): Promise<EnrichedOrderItem[]> {
+    throw new Error('Method not implemented.');
+  }
+
+  // --- Complex Actions ---
+  async placeOrder(distributorId: string, items: { skuId: string; quantity: number }[]): Promise<Order> {
+    throw new Error('Method not implemented.');
+  }
+  async updateOrderItems(orderId: string, items: { skuId: string; quantity: number }[]): Promise<void> {
+    throw new Error('Method not implemented.');
+  }
+  async updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
+      throw new Error('Method not implemented.');
+  }
+  async deleteOrder(orderId: string, remarks: string): Promise<void> {
+      throw new Error('Method not implemented.');
+  }
+  
+  // --- Returns ---
+  async initiateOrderReturn(orderId: string, itemsToReturn: { skuId: string; quantity: number }[], remarks: string): Promise<OrderReturn> {
+      throw new Error('Method not implemented.');
+  }
+  
+  async getReturns(status: ReturnStatus, portalState: PortalState | null): Promise<EnrichedOrderReturn[]> {
+      throw new Error('Method not implemented.');
+  }
+  async confirmOrderReturn(returnId: string): Promise<void> {
+      throw new Error('Method not implemented.');
+  }
+
+  // --- SKUs ---
+  async getSKUs(): Promise<SKU[]> { throw new Error('Method not implemented.'); }
+  async addSKU(skuData: Omit<SKU, 'id'>, role: UserRole): Promise<SKU> {
+      throw new Error('Method not implemented.');
+  }
+  async updateSKU(skuData: SKU, role: UserRole): Promise<SKU> {
+      throw new Error('Method not implemented.');
+  }
+
+  // --- Schemes ---
+  async getSchemes(portalState: PortalState | null): Promise<Scheme[]> {
+    throw new Error('Method not implemented.');
+  }
+  async getGlobalSchemes(): Promise<Scheme[]> {
+      throw new Error('Method not implemented.');
+  }
+  async getSchemesByDistributor(distributorId: string): Promise<Scheme[]> {
+      throw new Error('Method not implemented.');
+  }
+  async getSchemesByStore(storeId: string): Promise<Scheme[]> {
+    throw new Error('Method not implemented.');
+  }
+  async addScheme(schemeData: Omit<Scheme, 'id'>, role: UserRole): Promise<Scheme> {
+      throw new Error('Method not implemented.');
+  }
+  async updateScheme(schemeData: Scheme, role: UserRole): Promise<Scheme> {
+      throw new Error('Method not implemented.');
+  }
+  async deleteScheme(schemeId: string, role: UserRole): Promise<void> {
+    throw new Error('Method not implemented.');
+  }
+  async stopScheme(schemeId: string, username: string, role: UserRole): Promise<void> {
+      throw new Error('Method not implemented.');
+  }
+  async reactivateScheme(schemeId: string, newEndDate: string, username: string, role: UserRole): Promise<Scheme> {
+    throw new Error('Method not implemented.');
+  }
+
+  // --- Price Tiers ---
+  async getPriceTiers(): Promise<PriceTier[]> { throw new Error('Method not implemented.'); }
+  async addPriceTier(tierData: Omit<PriceTier, 'id'>, role: UserRole): Promise<PriceTier> {
+      throw new Error('Method not implemented.');
+  }
+  async updatePriceTier(tierData: PriceTier, role: UserRole): Promise<PriceTier> {
+      throw new Error('Method not implemented.');
+  }
+  async deletePriceTier(tierId: string, role: UserRole): Promise<void> {
+      throw new Error('Method not implemented.');
+  }
+  async getAllPriceTierItems(): Promise<PriceTierItem[]> { throw new Error('Method not implemented.'); }
+  async setPriceTierItems(tierId: string, items: { skuId: string, price: number }[], role: UserRole): Promise<void> {
+      throw new Error('Method not implemented.');
+  }
+
+  // --- Wallet ---
+  async getAllWalletTransactions(portalState: PortalState | null): Promise<EnrichedWalletTransaction[]> {
+      throw new Error('Method not implemented.');
   }
   async getWalletTransactionsByDistributor(distributorId: string): Promise<EnrichedWalletTransaction[]> {
-    const {data, error} = await this.supabase.from('wallet_transactions').select('*').eq('distributor_id', distributorId);
-    if(error) throw error;
-    const txs = snakeToCamel<WalletTransaction[]>(data || []);
-    const dist = await this.getDistributorById(distributorId);
-    return txs.map(tx => ({...tx, accountName: dist?.name || '?', accountType: 'Distributor'}));
+    throw new Error('Method not implemented.');
   }
-  async getInvoiceData(orderId: string): Promise<InvoiceData | null> { const { data: orderData, error: orderError } = await this.supabase.from('orders').select('*, distributors(*)').eq('id', orderId).single(); if (orderError) throw orderError; const items = await this.getOrderItems(orderId); return { order: snakeToCamel(orderData), distributor: snakeToCamel(orderData.distributors), items } as InvoiceData; }
-  async getStockTransfers(): Promise<EnrichedStockTransfer[]> { const { data, error } = await this.supabase.from('stock_transfers').select('*, stores(name)'); if (error) throw error; const enriched = (data || []).map((item: any) => { const { stores, ...rest } = snakeToCamel<any>(item); return { ...rest, destinationStoreName: stores?.name }; }); return enriched; }
-  async getEnrichedStockTransferItems(transferId: string): Promise<EnrichedStockTransferItem[]> { const { data, error } = await this.supabase.from('stock_transfer_items').select('*, skus(name, hsn_code, gst_percentage)').eq('transfer_id', transferId); if (error) throw error; const enriched = (data || []).map((item: any) => { const { skus, ...rest } = snakeToCamel<any>(item); return { ...rest, skuName: skus?.name, hsnCode: skus?.hsnCode, gstPercentage: skus?.gstPercentage }; }); return enriched; }
-  async getDispatchNoteData(transferId: string): Promise<DispatchNoteData | null> { const { data: transferData, error: transferError } = await this.supabase.from('stock_transfers').select('*, stores(*)').eq('id', transferId).single(); if (transferError) throw transferError; const items = await this.getEnrichedStockTransferItems(transferId); return { transfer: snakeToCamel(transferData), store: snakeToCamel(transferData.stores), items }; }
-  
-  // --- Transactional Logic (RPC) ---
-  // These methods call Supabase Edge Functions (RPCs) to ensure atomicity.
-  // You MUST deploy the provided SQL functions to your Supabase project for these to work.
-
-  async addPlantProduction(items: { skuId: string; quantity: number }[]): Promise<void> {
-    const { error } = await this.supabase.rpc('add_plant_production', {
-      items_to_add: items
-    });
-    if (error) {
-      console.error('RPC Error (add_plant_production):', error);
-      throw new Error(`Failed to add production: ${error.message}`);
-    }
-  }
-
-  async placeOrder(distributorId: string, items: { skuId: string; quantity: number }[]): Promise<Order> {
-    const { data, error } = await this.supabase.rpc('place_order', {
-      p_distributor_id: distributorId,
-      p_items: items
-    });
-    if (error) {
-      console.error('RPC Error (place_order):', error);
-      throw new Error(`Failed to place order: ${error.message}`);
-    }
-    return snakeToCamel<Order>(data);
-  }
-
-  async updateOrderItems(orderId: string, items: { skuId: string; quantity: number }[]): Promise<void> {
-    const { error } = await this.supabase.rpc('update_order_items', { p_order_id: orderId, p_items: items });
-    if (error) throw new Error(`Failed to update order items: ${error.message}`);
-  }
-
-  async updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
-    const { error } = await this.supabase.rpc('update_order_status', { p_order_id: orderId, p_status: status });
-    if (error) throw new Error(`Failed to update order status: ${error.message}`);
-  }
-
-  async deleteOrder(orderId: string, remarks: string): Promise<void> {
-    const { error } = await this.supabase.rpc('delete_order', { p_order_id: orderId, p_remarks: remarks });
-    if (error) throw new Error(`Failed to delete order: ${error.message}`);
-  }
-
-  async initiateOrderReturn(orderId: string, itemsToReturn: { skuId: string; quantity: number }[], remarks: string): Promise<OrderReturn> {
-    const { data, error } = await this.supabase.rpc('initiate_order_return', { p_order_id: orderId, p_items: itemsToReturn, p_remarks: remarks });
-    if (error) throw new Error(`Failed to initiate return: ${error.message}`);
-    return snakeToCamel<OrderReturn>(data);
-  }
-
-  async confirmOrderReturn(returnId: string): Promise<void> {
-    const { error } = await this.supabase.rpc('confirm_order_return', { p_return_id: returnId });
-    if (error) throw new Error(`Failed to confirm return: ${error.message}`);
-  }
-
   async rechargeWallet(distributorId: string, amount: number, paymentMethod: string, remarks: string, date: string): Promise<void> {
-    const { error } = await this.supabase.rpc('recharge_wallet', { p_distributor_id: distributorId, p_amount: amount, p_payment_method: paymentMethod, p_remarks: remarks, p_date: date });
-    if (error) throw new Error(`Failed to recharge wallet: ${error.message}`);
+    throw new Error('Method not implemented.');
+  }
+   async rechargeStoreWallet(storeId: string, amount: number, paymentMethod: string, remarks: string, date: string): Promise<void> {
+    throw new Error('Method not implemented.');
   }
 
-  async rechargeStoreWallet(storeId: string, amount: number, paymentMethod: string, remarks: string, date: string): Promise<void> {
-    const { error } = await this.supabase.rpc('recharge_store_wallet', { p_store_id: storeId, p_amount: amount, p_payment_method: paymentMethod, p_remarks: remarks, p_date: date });
-    if (error) throw new Error(`Failed to recharge store wallet: ${error.message}`);
+  // --- Notifications ---
+  async getNotifications(): Promise<Notification[]> {
+    throw new Error('Method not implemented.');
+  }
+  async markNotificationAsRead(id: string): Promise<void> {
+    throw new Error('Method not implemented.');
+  }
+  async markAllNotificationsAsRead(): Promise<void> {
+    throw new Error('Method not implemented.');
+  }
+  
+  // --- Invoice ---
+  async getInvoiceData(orderId: string): Promise<InvoiceData | null> {
+    throw new Error('Method not implemented.');
   }
 
+  // --- Stock Management ---
+  async getStock(locationId: 'plant' | string): Promise<EnrichedStockItem[]> {
+      throw new Error('Method not implemented.');
+  }
+  async addPlantProduction(items: { skuId: string; quantity: number }[]): Promise<void> {
+      throw new Error('Method not implemented.');
+  }
+  async transferStockToStore(storeId: string, items: { skuId: string; quantity: number }[], username: string): Promise<void> {
+      throw new Error('Method not implemented.');
+  }
+
+   // --- Stock Transfers ---
   async createStockTransfer(storeId: string, items: { skuId: string; quantity: number }[]): Promise<StockTransfer> {
-    const { data, error } = await this.supabase.rpc('create_stock_transfer', { p_store_id: storeId, p_items: items });
-    if (error) throw new Error(`Failed to create stock transfer: ${error.message}`);
-    return snakeToCamel<StockTransfer>(data);
+    throw new Error('Method not implemented.');
   }
-
+  async getStockTransfers(): Promise<EnrichedStockTransfer[]> {
+      throw new Error('Method not implemented.');
+  }
+  async getEnrichedStockTransferItems(transferId: string): Promise<EnrichedStockTransferItem[]> {
+    throw new Error('Method not implemented.');
+  }
   async updateStockTransferStatus(transferId: string, status: StockTransferStatus): Promise<void> {
-    const { error } = await this.supabase.rpc('update_stock_transfer_status', { p_transfer_id: transferId, p_status: status });
-    if (error) throw new Error(`Failed to update transfer status: ${error.message}`);
+    throw new Error('Method not implemented.');
   }
-  
-  async transferStockToStore(): Promise<void> {
-    throw new Error("transferStockToStore is deprecated and should not be used.");
+  async getDispatchNoteData(transferId: string): Promise<DispatchNoteData | null> {
+      throw new Error('Method not implemented.');
   }
-  
-  async reactivateScheme(schemeId: string, newEndDate: string, username: string, role: UserRole): Promise<Scheme> {
-      const { data, error } = await this.supabase.from('schemes').update({ end_date: newEndDate, stopped_by: null, stopped_date: null }).eq('id', schemeId).select().single();
-      if (error) throw error;
-      return snakeToCamel<Scheme>(data);
+  async getStockLedger(locationId: 'plant' | string): Promise<StockLedgerEntry[]> {
+    throw new Error('Method not implemented.');
   }
 }
