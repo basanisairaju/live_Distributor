@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import { Order, Distributor, OrderStatus, OrderItem, SKU, Scheme, User, UserRole } from '../types';
@@ -578,8 +579,3 @@ const SalesPage: React.FC = () => {
 
 // FIX: Added default export to resolve module import error in App.tsx.
 export default SalesPage;
-
-```
-  </change>
-</changes>
-```
