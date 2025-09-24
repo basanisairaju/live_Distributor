@@ -166,7 +166,7 @@ const RechargeWallet: React.FC = () => {
         if (error instanceof Error) {
             message = error.message;
         } else if (error && typeof error === 'object' && 'message' in error) {
-            // FIX: Correctly cast the error object to access its 'message' property, resolving a TypeScript error.
+            // FIX: Correctly cast the error object to access its 'message' property, which is of type 'unknown', and convert it to a string. This resolves a TypeScript error.
             message = String((error as { message: unknown }).message);
         }
         setStatusMessage({ type: 'error', text: `Failed to recharge wallet: ${message}` });

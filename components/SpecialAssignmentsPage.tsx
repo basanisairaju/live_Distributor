@@ -154,8 +154,8 @@ const SpecialAssignmentsPage = () => {
                                 <tr>
                                     <SortableTableHeader label="Distributor" sortKey="name" requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="whitespace-nowrap" />
                                     {skus.map(sku => (
-                                        // FIX: Cast dynamic sortKey to 'any' to resolve TypeScript generic inference issue.
-                                        <SortableTableHeader<PricingTableRow> key={sku.id} label={sku.name} sortKey={sku.id} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
+                                        // FIX: Cast dynamic sortKey to 'any' to resolve a TypeScript generic inference issue where sku.id (string) was not being correctly identified as a valid key for the PricingTableRow type, which uses an index signature.
+                                        <SortableTableHeader<PricingTableRow> key={sku.id} label={sku.name} sortKey={sku.id as any} requestSort={requestPricingSort} sortConfig={pricingSortConfig} className="text-center whitespace-nowrap" />
                                     ))}
                                 </tr>
                             </thead>

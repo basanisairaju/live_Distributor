@@ -54,10 +54,8 @@ export class SupabaseApiService implements ApiService {
 
   // --- Auth ---
   async login(email: string, pass: string): Promise<User> {
-    // Trim whitespace from email to prevent login issues
     const trimmedEmail = email.trim();
 
-    // Query the profiles table directly for a user with matching username and password
     const { data: profile, error } = await this.supabase
         .from('profiles')
         .select('id, username, role, store_id, permissions')
@@ -65,14 +63,20 @@ export class SupabaseApiService implements ApiService {
         .eq('password', pass)
         .single();
 
-    // If there's an error or no profile is found, reject the login attempt
-    if (error || !profile) {
-        // Log the actual error for debugging but return a generic message to the user
-        console.error('Login error:', error);
-        throw new Error('Invalid login credentials.');
+    if (error) {
+        // 'PGRST116' means "Query returned 0 rows"
+        if (error.code === 'PGRST116') {
+             throw new Error('Invalid username or password.');
+        }
+        // For other errors, provide the specific Supabase message
+        console.error('Supabase login error:', error);
+        throw new Error(`Database error: ${error.message}`);
     }
 
-    // If a profile is found, return it as a User object
+    if (!profile) {
+        throw new Error('Invalid username or password.');
+    }
+
     return snakeToCamel<User>(profile);
   }
 
@@ -83,6 +87,7 @@ export class SupabaseApiService implements ApiService {
   }
   
   async seedAdminUser(): Promise<void> {
+    console.log('[seedAdminUser] Starting admin user check...');
     const allPermissions = menuItems.map(item => item.path);
 
     const { data, error } = await this.supabase
@@ -92,7 +97,7 @@ export class SupabaseApiService implements ApiService {
       .single();
 
     if (error && error.code === 'PGRST116') { // 'PGRST116' is "Query returned 0 rows" -> User does not exist.
-      console.log('Admin user not found, seeding...');
+      console.log('[seedAdminUser] Admin user not found, attempting to create...');
       const { error: insertError } = await this.supabase
         .from('profiles')
         .insert({
@@ -104,31 +109,31 @@ export class SupabaseApiService implements ApiService {
         });
       
       if (insertError) {
-        console.error('Error seeding admin user:', insertError);
+        console.error('[seedAdminUser] Error seeding admin user:', insertError);
         throw new Error('Could not seed admin user.');
       }
-      console.log('Admin user seeded successfully.');
+      console.log('[seedAdminUser] Admin user seeded successfully.');
     } else if (error) {
-      console.error('Error checking for admin user:', error);
+      console.error('[seedAdminUser] Error checking for admin user:', error);
     } else if (data) { // User exists, check if permissions need an update.
+      console.log('[seedAdminUser] Admin user found. Verifying permissions...');
       const existingPermissions = new Set(data.permissions || []);
       const requiredPermissions = new Set(allPermissions);
       
-      // Check if permissions are different
       if (existingPermissions.size !== requiredPermissions.size || !allPermissions.every(p => existingPermissions.has(p))) {
-        console.log('Admin user permissions are outdated, updating...');
+        console.log('[seedAdminUser] Admin permissions are outdated, updating...');
         const { error: updateError } = await this.supabase
           .from('profiles')
           .update({ permissions: allPermissions })
           .eq('id', data.id);
         
         if (updateError) {
-          console.error('Error updating admin user permissions:', updateError);
+          console.error('[seedAdminUser] Error updating admin permissions:', updateError);
         } else {
-          console.log('Admin user permissions updated.');
+          console.log('[seedAdminUser] Admin user permissions updated successfully.');
         }
       } else {
-          // console.log('Admin user already exists with correct permissions.');
+          console.log('[seedAdminUser] Admin user permissions are up-to-date.');
       }
     }
   }
