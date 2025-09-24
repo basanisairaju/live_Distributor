@@ -1,13 +1,16 @@
-
-
 // FIX: Changed PortalState import from hooks/useAuth to types to break a circular dependency.
 import { PortalState, CompanyDetails, DispatchNoteData, Distributor, EnrichedOrderItem, EnrichedOrderReturn, EnrichedStockItem, EnrichedStockTransfer, EnrichedStockTransferItem, EnrichedWalletTransaction, InvoiceData, Notification, Order, OrderItem, OrderReturn, OrderStatus, PriceTier, PriceTierItem, ReturnStatus, Scheme, SKU, StockItem, StockLedgerEntry, StockTransfer, StockTransferStatus, Store, User, UserRole, WalletTransaction } from "../types";
 
+export interface BackendStatus {
+  status: 'ok' | 'error';
+  message: string;
+}
 export interface ApiService {
   // Auth
   login(email: string, pass: string): Promise<User>;
   logout(): Promise<void>;
   seedAdminUser(): Promise<void>;
+  checkBackendStatus(): Promise<BackendStatus>;
 
   // Users
   getUsers(portalState: PortalState | null): Promise<User[]>;

@@ -6,7 +6,7 @@ import {
   // FIX: Imported PortalState from types.ts to break a circular dependency.
   PortalState
 } from '../types';
-import { ApiService } from './apiService.interface';
+import { ApiService, BackendStatus } from './apiService.interface';
 import {
   users, distributors, orders, orderItems, skus, schemes, walletTransactions, notifications,
   priceTiers, priceTierItems, stores, orderReturns, stockItems, stockLedger,
@@ -140,6 +140,9 @@ export class MockApiService implements ApiService {
         console.log('Mock admin user seeded.');
     }
     return Promise.resolve();
+  }
+  async checkBackendStatus(): Promise<BackendStatus> {
+    return Promise.resolve({ status: 'ok', message: 'Mock Backend Connected' });
   }
 
   // --- Users ---

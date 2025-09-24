@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { ApiService } from './apiService.interface';
+import { ApiService, BackendStatus } from './apiService.interface';
 import {
   User, UserRole, Distributor, Order, OrderStatus, OrderItem, SKU, Scheme, WalletTransaction,
   Notification, PriceTier, PriceTierItem, EnrichedOrderItem, EnrichedWalletTransaction, Store,
@@ -132,6 +132,31 @@ export class SupabaseApiService implements ApiService {
       }
     }
   }
+
+  async checkBackendStatus(): Promise<BackendStatus> {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
+        return { status: 'error', message: 'Backend not configured: Missing Supabase credentials.' };
+    }
+    
+    try {
+        const { error } = await this.supabase.from('stores').select('id', { count: 'exact', head: true });
+
+        if (error) {
+            if (error.message.includes('Invalid API key') || error.message.includes('invalid JWT')) {
+                return { status: 'error', message: 'Connection Failed: Invalid Supabase API Key.' };
+            }
+            if (error.message.includes('fetch failed')) {
+                return { status: 'error', message: 'Connection Failed: Cannot reach backend. Check Supabase URL and network.' };
+            }
+            return { status: 'error', message: `Connection Failed: ${error.message}` };
+        }
+
+        return { status: 'ok', message: 'Backend connected' };
+    } catch (e: any) {
+        return { status: 'error', message: `Network Error: ${e.message || 'Cannot reach server.'}` };
+    }
+  }
+
 
   // --- Generic Helpers ---
   private async _getAll<T>(tableName: string): Promise<T[]> {

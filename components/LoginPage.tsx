@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 // FIX: Corrected the import for 'useNavigate' to resolve the module export error.
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -6,7 +6,8 @@ import { useForm, SubmitHandler } from 'react-hook-form';
 import Card from './common/Card';
 import Button from './common/Button';
 import Input from './common/Input';
-import { Briefcase, Eye, EyeOff } from 'lucide-react';
+import { Briefcase, Eye, EyeOff, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { api } from '../services/api';
 
 interface FormInputs {
   email: string;
@@ -26,6 +27,18 @@ const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [backendStatus, setBackendStatus] = useState<{ status: 'checking' | 'ok' | 'error'; message: string }>({
+    status: 'checking',
+    message: 'Connecting to backend...',
+  });
+
+  useEffect(() => {
+    const checkStatus = async () => {
+        const result = await api.checkBackendStatus();
+        setBackendStatus(result);
+    };
+    checkStatus();
+  }, []);
 
   const handleLogin: SubmitHandler<FormInputs> = async (data) => {
     setIsLoading(true);
@@ -62,6 +75,28 @@ const LoginPage: React.FC = () => {
             <Briefcase size={40} className="mx-auto text-primary" />
             <h1 className="text-3xl font-bold text-content mt-4">Distributor Portal</h1>
         </div>
+        
+        <div className="text-center mb-4 h-10 flex items-center justify-center">
+            {backendStatus.status === 'checking' && (
+                <div className="flex items-center justify-center text-sm text-contentSecondary animate-pulse">
+                    <RefreshCw size={16} className="mr-2 animate-spin" />
+                    {backendStatus.message}
+                </div>
+            )}
+            {backendStatus.status === 'ok' && (
+                <div className="flex items-center justify-center text-sm text-green-600">
+                    <CheckCircle size={16} className="mr-2" />
+                    {backendStatus.message}
+                </div>
+            )}
+            {backendStatus.status === 'error' && (
+                <div className="flex items-center justify-center text-sm text-red-700 bg-red-100 p-2 rounded-lg w-full">
+                    <XCircle size={16} className="mr-2 flex-shrink-0" />
+                    <span className="text-left">{backendStatus.message}</span>
+                </div>
+            )}
+        </div>
+
         <Card>
             <h2 className="text-lg font-semibold text-center text-content mb-1">Welcome back</h2>
             <p className="text-sm text-contentSecondary text-center mb-6">Please sign in to continue</p>
@@ -89,7 +124,13 @@ const LoginPage: React.FC = () => {
             />
             {loginError && <p className="text-sm text-red-600 text-center pt-2">{loginError}</p>}
             <div className="pt-4">
-                <Button type="submit" className="w-full" size="lg" isLoading={isLoading} disabled={!isValid}>
+                <Button 
+                    type="submit" 
+                    className="w-full" 
+                    size="lg" 
+                    isLoading={isLoading} 
+                    disabled={!isValid || isLoading || backendStatus.status !== 'ok'}
+                >
                     Login
                 </Button>
             </div>
